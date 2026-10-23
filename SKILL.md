@@ -1,5 +1,6 @@
 ---
 name: slime-mold-map
+author: Luci逻辑喵
 description: 把 JSON 规格渲染成可交互的黏菌图谱（关系网络/思维导图）单文件 HTML；规格是唯一真相，HTML 是派生产物
 ---
 

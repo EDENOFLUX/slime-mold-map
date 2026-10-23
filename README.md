@@ -81,6 +81,11 @@ verify_docs.js            校验节点引用的文档是否存在
 examples/hello.json       虚构示例（10 节点，无个人信息）
 ```
 
+## 作者
+
+**Luci逻辑喵**（[@EDENOFLUX](https://github.com/EDENOFLUX)）
+—— 写东西的人，顺手做了个把想法长成图的东西。
+
 ## 许可
 
 见 `LICENSE`。

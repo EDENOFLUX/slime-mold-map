@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+__MACOSX/
+._*
+
+# Archives (source zips already extracted)
+*.zip
+
+# Local temp
+*.tmp
+
+# Build artifacts (generated per-build, not source)
+spec.history

@@ -1,0 +1,3617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>树状思维工作台</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c22; --panel2:#1e252e; --line:#2b333d;
+    --txt:#e6edf3; --muted:#8b97a5; --accent:#5ec8d8; --accent2:#f4a259;
+    --closed:#3fb98a; --mid:#5b8def; --scan:#e0a64b;
+    --card-bg:#1b2129; --card-line:#323b47;
+    --shadow:0 4px 18px rgba(0,0,0,.4);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f6f8; --panel:#ffffff; --panel2:#eef1f4; --line:#dde3ea;
+      --txt:#1b2129; --muted:#67727f; --accent:#0f9bb3; --accent2:#d9772e;
+      --closed:#1f9e72; --mid:#3a6fd8; --scan:#c8851f;
+      --card-bg:#ffffff; --card-line:#cdd6df;
+      --shadow:0 4px 18px rgba(40,60,80,.12);
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--txt); display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  header{
+    padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:10px; flex:0 0 auto; position:relative; z-index:40;
+  }
+  .topbar{display:flex; align-items:center; gap:8px; flex:1; min-width:0;}
+  .spacer{flex:1;}
+
+  /* 帮助浮层 */
+  .helppop{position:absolute; top:calc(100% + 6px); right:14px; width:440px; max-height:60vh; overflow:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow);
+    padding:12px 14px; display:none; z-index:60;}
+  .helppop.show{display:block;}
+
+  /* 版本提示条：spec 已更新但本地存档是旧的 */
+  .verbar{display:none; align-items:center; gap:10px; padding:6px 14px;
+    background:rgba(244,162,89,.12); border-bottom:1px solid var(--accent2);
+    font-size:12px; color:var(--accent2); flex:0 0 auto;}
+  .verbar.show{display:flex;}
+  .verbar .spacer{flex:1;}
+  .verbar button{padding:3px 10px; font-size:12px;}
+  button{
+    font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--panel2);
+    color:var(--txt); padding:6px 11px; border-radius:8px; transition:.15s;
+  }
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent); color:#04222a; border-color:var(--accent); font-weight:600;}
+  button.ghost{background:transparent;}
+  button.ghost.on{background:var(--accent2); color:#fff; border-color:var(--accent2); font-weight:600;}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .seg button{border:none; border-right:1px solid var(--line); border-radius:0; white-space:nowrap;}
+  .seg button:last-child{border-right:none;}
+  .seg button.active{font-weight:600;}
+
+  /* model explainer */
+  .model{font-size:12px; color:var(--muted); background:var(--panel2); border:1px solid var(--line);
+    border-radius:8px; padding:8px 12px; line-height:1.5;}
+  .model b{color:var(--txt);}
+  .model .vast{color:var(--scan);}
+  .model .close{color:var(--closed);}
+  .model summary{cursor:pointer; color:var(--accent); font-weight:600; outline:none;}
+  .model[open] summary{margin-bottom:6px;}
+
+  /* project tabs */
+  .tabs{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+  .tab{padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:var(--panel2); font-size:12px;}
+  .tab.active{border-color:var(--accent); color:var(--accent); font-weight:600;}
+  /* 跨图重点角标：切图之前就知道哪张图有事等着，不必逐个点开找 */
+  .tabbadge{display:inline-block; margin-left:6px; min-width:16px; padding:0 4px;
+    background:var(--accent2); color:#1b1206; border-radius:999px;
+    font-size:10px; font-weight:600; line-height:15px; text-align:center; vertical-align:1px;}
+  .tab.active .tabbadge{background:var(--accent2);}
+  /* 常驻搜索：治「知道它在这张图里但找不着」。分支环解决「看见」，搜索解决「够得着」。 */
+  .findwrap{position:relative; flex:0 0 auto;}
+  .findin{width:210px; padding:5px 10px; font-size:12px; font-family:inherit;
+    background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:999px;}
+  .findin:focus{outline:none; border-color:var(--accent);}
+  .findin::placeholder{color:var(--muted);}
+  .findlist{position:absolute; top:calc(100% + 5px); right:0; width:340px; max-height:290px;
+    overflow-y:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    box-shadow:var(--shadow); display:none; flex-direction:column; z-index:40;}
+  .findlist.on{display:flex;}
+  .finditem{padding:7px 11px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; gap:2px;}
+  .finditem:last-child{border-bottom:none;}
+  .finditem:hover,.finditem.on{background:var(--panel2);}
+  .finditem .ft{color:var(--txt);}
+  .finditem .fm{font-size:10.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .finditem .fh{font-size:10.5px; color:var(--accent2);}
+  .findempty{padding:10px 12px; font-size:11.5px; color:var(--muted);}
+
+  /* main：阶段栏 → 阶段面板 → 画布 → 检视器 */
+  main{flex:1; display:flex; min-height:0;}
+  #phaseRail{width:56px; flex:0 0 56px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:8px;}
+  .pstep{width:38px; height:48px; border-radius:9px; border:1px solid transparent; background:transparent;
+    color:var(--muted); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px; cursor:pointer; font-size:10px; line-height:1.15; padding:0;}
+  .pstep .no{font-size:13px; font-weight:600;}
+  .pstep:hover{border-color:var(--line); color:var(--txt);}
+  .pstep.on{background:var(--panel2); border-color:var(--accent2); color:var(--accent2);}
+  #railFoot{margin-top:auto; display:flex; flex-direction:column; gap:6px; align-items:center;}
+  #railFoot button{width:38px; height:30px; padding:0; font-size:13px;}
+  /* 重点 = 跨阶段有效的独立入口，不占 244px 常驻位；点击才展开列表 */
+  #btnKeys{width:44px; padding:5px 0 4px; border:1px solid var(--line); border-radius:9px;
+    background:var(--panel2); color:var(--muted); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:1px; font-size:10px; line-height:1.15;}
+  #btnKeys:hover{border-color:var(--accent2); color:var(--txt);}
+  #btnKeys .ico{font-size:13px; color:var(--accent2);}
+  #btnKeys .cnt{font-size:9.5px; color:var(--muted);}
+  #btnKeys.on{background:var(--panel2); border-color:var(--accent2); color:var(--txt);}
+  #btnKeys.on .cnt{color:var(--accent2);}
+  .railSep{width:26px; height:1px; background:var(--line); margin:1px 0;}
+
+  /* 左栏 = 两个独立板块：重点（按需展开，默认收起）+ 探索/强化/收敛（阶段面板），竖向堆叠不占额外宽度 */
+  #leftStack{display:flex; flex-direction:column; width:244px; flex:0 0 244px; min-height:0;}
+  #keyPanel{flex:0 0 auto; background:var(--panel); border-right:1px solid var(--line);
+    border-bottom:2px solid var(--accent2); padding:12px; max-height:52vh; overflow-y:auto;
+    display:flex; flex-direction:column; gap:8px;}
+  /* 默认收起：不加 .on 就不占任何高度（display:none，不是 height:0——省掉滚动条与空白） */
+  #keyPanel:not(.on){display:none;}
+  .kpanelhead{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:13px; color:var(--txt); font-weight:600;}
+  .kpanelhead .cnt{font-size:11px; color:var(--muted); font-weight:400;}
+  button.tiny{width:22px; height:22px; padding:0; font-size:11px; line-height:1; flex:0 0 auto;}
+  #phasePanel{flex:1 1 auto; min-height:0; overflow-y:auto; background:var(--panel);
+    border-right:1px solid var(--line); padding:12px; display:flex; flex-direction:column; gap:10px;}
+  #phasePanel h3{margin:0; font-size:13px; color:var(--txt); font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  #phasePanel h3 .cnt{font-size:11px; color:var(--muted); font-weight:400;}
+  .ph{display:none; flex-direction:column; gap:8px;}
+  .ph.on{display:flex;}
+  .phtip{font-size:11px; color:var(--muted); line-height:1.5;}
+  body.rail-collapsed #leftStack{display:none;}
+
+  #canvasWrap{position:relative; flex:1; min-width:0; background:
+     radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0/26px 26px, var(--bg);}
+  svg{width:100%; height:100%; display:block; cursor:grab;}
+  svg.panning{cursor:grabbing;}
+
+  .card{
+    width:212px; min-height:64px; background:var(--card-bg); border:1.5px solid var(--card-line);
+    border-radius:10px; padding:8px 10px; box-shadow:var(--shadow); position:relative;
+    transition:border-color .15s, transform .1s; cursor:pointer; overflow:hidden;
+  }
+  .card:hover{transform:translateY(-1px);}
+  .card.sel{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset, var(--shadow);}
+  .card .ttl{font-weight:600; font-size:13px; line-height:1.3; word-break:break-word; padding-right:14px;}
+  .card .note{font-size:11px; color:var(--muted); margin-top:3px; line-height:1.4; word-break:break-word;
+    max-height:42px; overflow:hidden;}
+  .card .tags{font-size:10px; color:var(--accent); margin-top:3px; word-break:break-word;}
+  .card .trend{font-size:10px; color:var(--accent2); margin-top:3px; line-height:1.45;
+    word-break:break-word; max-height:30px; overflow:hidden;}
+  .card .meta{display:flex; align-items:center; justify-content:space-between; margin-top:6px; font-size:10px; gap:5px;}
+  .card .meta .nid{font-variant-numeric:tabular-nums; opacity:.65; flex:0 0 auto; font-size:10px;}
+  #roNum{font-family:ui-monospace,Menlo,monospace; color:var(--accent2); font-weight:600; font-size:12px;}
+  .badge{padding:1px 7px; border-radius:999px; font-weight:600; font-size:10px;}
+  .badge.scan{background:rgba(224,166,75,.18); color:var(--scan);}
+  .badge.mid{background:rgba(91,141,239,.18); color:var(--mid);}
+  .badge.closed{background:rgba(63,185,138,.18); color:var(--closed);}
+  .cbar{height:4px; border-radius:3px; background:var(--line); overflow:hidden; margin-top:5px;}
+  .cbar>div{height:100%; background:linear-gradient(90deg,var(--scan),var(--closed));}
+  /* 连线滚动光效：黏菌管道运输。未闭合 父→子（eflow-fwd）；已闭合 子→父（eflow-bwd） */
+  @keyframes slimeFlow{ from{stroke-dashoffset:0} to{stroke-dashoffset:-24} }
+  .eflow{fill:none; pointer-events:none; stroke-linecap:round;}
+  .eflow-fwd{animation:slimeFlow var(--eflow-dur,1.3s) linear infinite;}
+  .eflow-bwd{animation:slimeFlow var(--eflow-dur,1.3s) linear infinite reverse;}
+  @media (prefers-reduced-motion: reduce){ .eflow-fwd,.eflow-bwd{animation:none;} }
+  /* 折叠只收子树，不藏内容：说明与走向始终显示（超长截断） */
+
+  /* 节点上下文检视器：默认隐藏；选中节点时从右半边滑入（覆盖画布右部，左半边思维导图始终可见） */
+  aside#inspector{
+    position:absolute; top:0; right:0; bottom:0; width:44%; min-width:300px; max-width:460px;
+    background:var(--panel); border-left:1px solid var(--line);
+    box-shadow:-10px 0 30px rgba(0,0,0,.20); padding:14px; overflow-y:auto;
+    display:none; flex-direction:column; gap:12px; z-index:30;
+  }
+  aside#inspector.show{display:flex;}
+  #inspClose{position:absolute; top:10px; right:10px; width:28px; height:28px; padding:0;
+    font-size:14px; line-height:1; z-index:2;}
+  /* 面包屑：根 → … → 当前。恒常性——选中深层节点时必须知道自己在哪条路径上，
+     且能一键回上一层（原来只能靠重新翻图）。 */
+  .crumbs{display:flex; flex-wrap:wrap; align-items:center; gap:2px; font-size:11px; line-height:1.5;
+    padding-bottom:8px; margin-bottom:2px; border-bottom:1px dashed var(--line);}
+  .crumbs .cb{color:var(--muted); cursor:pointer; padding:1px 4px; border-radius:4px;
+    max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .crumbs .cb:hover{color:var(--txt); background:var(--panel2);}
+  .crumbs .cb.cur{color:var(--accent2); cursor:default; font-weight:500;}
+  .crumbs .cb.cur:hover{background:none;}
+  .crumbs .sep{color:var(--muted); opacity:.6;}
+
+  /* 节点上下文：子弹笔记 / 思维导图 两种形态 */
+  #roDocBox{ display:flex; flex-direction:column; gap:9px;
+    padding-top:10px; margin-top:2px; border-top:1px dashed var(--line); }
+  .bn-view{ max-height:46vh; overflow:auto; padding-right:4px; }
+  .bn-list{ list-style:none; margin:0; padding-left:14px; }
+  .bn-list .bn-list{ border-left:1px solid var(--line); margin-left:2px; }
+  .bn-item{ margin:6px 0; }
+  .bn-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px; }
+  .bn-label{ font-weight:600; color:var(--txt); font-size:13px; }
+  .bn-item.lv0 > .bn-head > .bn-label{ font-size:14px; color:var(--accent2); }
+  .bn-map{ display:inline-block; font-size:10.5px; line-height:1.4; cursor:pointer;
+    color:var(--accent); background:color-mix(in srgb, var(--accent) 14%, transparent);
+    border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius:999px; padding:0 7px; white-space:nowrap; }
+  .bn-map:hover{ background:var(--accent); color:var(--panel2); }
+  .bn-map.explicit{ color:var(--accent2); background:color-mix(in srgb, var(--accent2) 14%, transparent);
+    border-color:color-mix(in srgb, var(--accent2) 40%, transparent); }
+  .bn-meta{ font-size:10px; color:var(--muted); margin:2px 0 0; }
+  .bn-body{ font-size:11.5px; color:var(--muted); line-height:1.55; white-space:pre-wrap;
+    margin:3px 0 0; padding:4px 8px; background:var(--panel2); border-radius:6px; }
+  /* 画布上的「文档大卡片」：节点旁的可阅读子弹笔记面板（可滚动），取代把子弹拆成枝桠 */
+  .doccard{background:var(--card-bg); border:1.5px solid var(--accent2); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden;
+    width:100%; height:100%; box-sizing:border-box;}
+  .doccard .dc-head{display:flex; align-items:center; gap:8px; padding:8px 10px;
+    border-bottom:1px solid var(--line); background:var(--panel2); flex:0 0 auto;}
+  .doccard .dc-title{font-size:13px; font-weight:600; color:var(--accent2); flex:1; word-break:break-word; line-height:1.35;}
+  .doccard .dc-cnt{font-size:10.5px; color:var(--muted); white-space:nowrap;}
+  .doccard .dc-close{width:20px; height:20px; padding:0; line-height:1; font-size:14px; color:var(--muted);
+    border:1px solid var(--line); border-radius:6px; background:transparent; cursor:pointer; flex:0 0 auto;}
+  .doccard .dc-close:hover{color:var(--accent2); border-color:var(--accent2);}
+  .doccard .dc-body{flex:1; overflow-y:auto; padding:8px 10px; min-height:0;}
+  #inspClose:hover{color:var(--accent2);}
+  aside h3{margin:0 0 2px; font-size:13px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px;}
+  label{font-size:12px; color:var(--muted); display:block; margin-bottom:4px;}
+  input[type=text], textarea{
+    width:100%; font:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:8px; padding:7px 9px; resize:vertical;
+  }
+  textarea{min-height:64px;}
+  .row{display:flex; gap:8px;}
+  .row>*{flex:1;}
+  .closure-val{font-size:12px; color:var(--accent); font-weight:600;}
+  .hint{font-size:11px; color:var(--muted); line-height:1.5;}
+  /* 只读详情（界面不提供写入） */
+  .ro{font-size:12.5px; line-height:1.55; color:var(--txt); background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px; word-break:break-word;}
+  .ro.rottl{font-weight:600; font-size:13.5px;}
+  .ro.rotags{color:var(--accent); font-size:12px;}
+  .cbar.big{height:7px; border-radius:5px; margin-top:6px;}
+  .pickitem .pw{font-size:11px; color:var(--muted); margin-top:3px;}
+  .empty{color:var(--muted); font-size:13px; text-align:center; margin-top:40px; line-height:1.7;}
+
+  /* progress meter */
+  .meter{height:8px; border-radius:6px; background:var(--line); overflow:hidden;}
+  .meter>div{height:100%; background:linear-gradient(90deg,var(--scan),var(--closed)); transition:width .3s;}
+  .mlabel{font-size:11px; color:var(--muted); display:flex; justify-content:space-between;}
+
+  /* canvas 底部条 */
+  .canvasbar{position:absolute; left:0; bottom:0; right:0; display:flex; flex-direction:column;
+    background:var(--panel); border-top:1px solid var(--line); z-index:5;}
+  .cbar-main{display:flex; align-items:center; gap:12px; height:40px; padding:0 12px; flex:0 0 auto;}
+  /* 分支环图例独占一行：#legend 是 overflow:hidden 的单行，8 个分支条目塞进去会被裁掉，
+     所以给它自己的整行。flex 子项默认 flex-shrink:1，必须 flex:0 0 auto，否则高度被压扁。 */
+  .legend2{display:flex; align-items:center; gap:11px; flex:0 0 auto; height:0; overflow:hidden;
+    padding:0 12px; font-size:10.5px; color:var(--muted); white-space:nowrap;
+    border-top:0 solid var(--line);}
+  .legend2.on{height:26px; border-top-width:1px; border-top-style:dashed; overflow-x:auto; overflow-y:hidden;}
+  /* 缩略全局图（minimap）：常驻右下角，独立 SVG，不进 #viewport → 不随画布缩放而变形。
+     课题恒常性：放大/平移后依然看得见「我在哪、哪几块还没看」。 */
+  #minimap{position:absolute; right:12px; bottom:78px; width:196px; height:132px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    box-shadow:var(--shadow); z-index:6; overflow:hidden; cursor:crosshair; display:none;
+    transition:right .16s ease;}
+  #minimap.show{display:block;}
+  /* 右半边检视器打开时（z-index 30）会把 minimap 盖住 → 缩略图挪到检视器左缘外侧，
+     保证「读上下文时仍看得见全局」这条恒常性不破。 */
+  body.ins-open #minimap{right:calc(44% + 12px);}
+  #minimap svg{width:100%; height:100%; display:block;}
+  #minimap .mm-cap{position:absolute; top:4px; left:7px; font-size:9.5px; color:var(--muted);
+    pointer-events:none; letter-spacing:.2px;}
+  .legend{display:flex; gap:10px; color:var(--muted); align-items:center; overflow:hidden;
+    white-space:nowrap; flex:1 1 auto; min-width:0; font-size:10.5px;}
+  .legend>div{flex:0 0 auto;}
+  .legend .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle;}
+  /* 分支环图例：空心圆 + 彩色字形，复刻卡片上分支节点的真实长相 */
+  .legend2 .legendsep{color:var(--txt); font-weight:500; flex:0 0 auto;}
+  .legend2 .affleg{white-space:nowrap; cursor:help; flex:0 0 auto;}
+  .legend2 .afflegdot{display:inline-flex; align-items:center; justify-content:center;
+    width:14px; height:14px; margin-right:5px; vertical-align:middle;
+    border:1.5px solid currentColor; border-radius:50%;
+    font-size:9px; line-height:1; font-weight:700;}
+  .zoomctl{display:flex; gap:6px;}
+  .zoomctl button{width:28px; height:28px; padding:0; font-size:14px;}
+  .stat{color:var(--muted); white-space:nowrap;}
+
+  .toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--accent);
+    color:#04222a; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; opacity:0;
+    transition:.25s; pointer-events:none; z-index:50;}
+  .toast.show{opacity:1;}
+  .edgeitem{display:flex; align-items:center; gap:8px; font-size:11px; margin-top:6px;}
+  .edgeitem>span:first-child{flex:1; color:var(--muted); word-break:break-word;}
+  .edgeitem .w{color:var(--muted); font-variant-numeric:tabular-nums;}
+  .edgeitem{flex-direction:column; align-items:stretch; gap:2px;}
+  .edgeitem .el1{display:flex; align-items:center; gap:8px;}
+  .edgeitem .el1 .et{flex:1; color:var(--muted); word-break:break-word;}
+  .edgeitem .ew{font-size:11px; color:var(--txt); opacity:.75; line-height:1.5; padding-left:12px;
+    border-left:2px solid var(--line);}
+  .edgetip{position:fixed; z-index:60; max-width:340px; display:none; pointer-events:none;
+    background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font-size:11.5px; line-height:1.55; box-shadow:var(--shadow);}
+  .edgetip.show{display:block;}
+  .edgeitem .ty{font-style:normal; font-size:10px; color:var(--muted); border:1px solid var(--line);
+    border-radius:4px; padding:0 4px; margin-left:2px;}
+  .edgeitem .ty.contradict{color:#e06c75; border-color:#e06c75;}
+  .edgeitem .ty.same{color:#8b7ff0; border-color:#8b7ff0;}
+  .card.dim{opacity:.18;}
+  .card.ldim{opacity:.34;}   /* 决策镜片：被这一关划掉的卡——退到后排，但还看得见 */
+  /* 紧凑卡（四象限布局）：只留标题 + 元信息，说明与走向收进检视器 */
+  .card.dense{width:100% !important; box-sizing:border-box; min-width:0 !important; padding:7px 9px;}
+  .card.dense .ttl{font-size:12.5px; line-height:1.3; -webkit-line-clamp:2; display:-webkit-box;
+    -webkit-box-orient:vertical; overflow:hidden;}
+  .card.dense .note,.card.dense .trend,.card.dense .tags{display:none;}
+  .card.dense .meta{gap:4px; margin-top:5px;}
+  .card.dense .meta .vint,.card.dense .meta .ntype{display:none;}
+  .card.dense.size-L{min-width:0 !important;}
+  .card.dense .cbar{margin-top:5px;}
+  .lenssel{background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:11px; padding:3px 6px; flex:0 0 auto;}
+  .evhint{font-size:10px; color:var(--accent2); border:1px solid var(--accent2); border-radius:4px;
+    padding:1px 5px; flex:0 0 auto; cursor:help;}
+  .evitem{font-size:11px; color:var(--muted); padding:3px 0; cursor:pointer;}
+  .evitem:hover{color:var(--txt);}
+  .evitem .t{font-variant-numeric:tabular-nums; opacity:.7; margin-right:6px;}
+
+  /* ---- 三态 / 打通路径 ---- */
+  .card.dormant{opacity:.55; border-style:dashed; filter:saturate(.5);}
+  .card.trunk{border-color:var(--accent2); box-shadow:0 0 0 1px var(--accent2), var(--shadow);}
+  /* 卡片周围发散的「信息 / 功能小分支」：SVG 内置于 #keyLayer / viewport，随视口缩放自然缩放——缩小时一起变小，绝不人为放大 */
+  .affnode{cursor:pointer;}
+  .affnode circle{fill:var(--panel2); stroke-width:2;}
+  .affnode text{font-size:10px; font-weight:700; pointer-events:none;}
+  .aff-stub{stroke-width:1.6; opacity:.85;}
+  .ctx-note{font-size:12px; color:var(--muted); line-height:1.6; padding:4px 0;}
+  .aff-key  circle{stroke:var(--accent2);} .aff-key  text{fill:var(--accent2);} .aff-key-stub {stroke:var(--accent2);}
+  .aff-key:hover  circle{fill:var(--accent2);} .aff-key:hover  text{fill:var(--panel2);}
+  .aff-doc  circle{stroke:#4aa3ff;} .aff-doc  text{fill:#4aa3ff;} .aff-doc-stub {stroke:#4aa3ff;}
+  .aff-doc:hover  circle{fill:#4aa3ff;} .aff-doc:hover  text{fill:var(--panel2);}
+  .aff-docctx circle{stroke:#7fd4ff;} .aff-docctx text{fill:#7fd4ff;} .aff-docctx-stub{stroke:#7fd4ff;}
+  .aff-docctx:hover circle{fill:#7fd4ff;} .aff-docctx:hover text{fill:var(--panel2);}
+  .aff-note circle{stroke:#b07cff;} .aff-note text{fill:#b07cff;} .aff-note-stub{stroke:#b07cff;}
+  .aff-note:hover circle{fill:#b07cff;} .aff-note:hover text{fill:var(--panel2);}
+  .aff-link circle{stroke:#56b870;} .aff-link text{fill:#56b870;} .aff-link-stub{stroke:#56b870;}
+  .aff-link:hover circle{fill:#56b870;} .aff-link:hover text{fill:var(--panel2);}
+  .aff-path circle{stroke:#2fb6a8;} .aff-path text{fill:#2fb6a8;} .aff-path-stub{stroke:#2fb6a8;}
+  .aff-path:hover circle{fill:#2fb6a8;} .aff-path:hover text{fill:var(--panel2);}
+  .aff-todo circle{stroke:#ffb84d;} .aff-todo text{fill:#ffb84d;} .aff-todo-stub{stroke:#ffb84d;}
+  .aff-todo:hover circle{fill:#ffb84d;} .aff-todo:hover text{fill:var(--panel2);}
+  /* 折叠/展开分支：展开态=钢蓝（结构性、可安静）；折叠态=橙（里面藏着东西，值得点） */
+  .aff-fold circle{stroke:#9db4d8;} .aff-fold text{fill:#9db4d8;} .aff-fold-stub{stroke:#9db4d8;}
+  .aff-fold:hover circle{fill:#9db4d8;} .aff-fold:hover text{fill:var(--panel2);}
+  .aff-fold.shut circle{stroke:var(--accent2);} .aff-fold.shut text{fill:var(--accent2);} .aff-fold.shut-stub{stroke:var(--accent2);}
+  .aff-fold.shut:hover circle{fill:var(--accent2);} .aff-fold.shut:hover text{fill:var(--panel2);}
+  /* ⤓ 展开这一支的所有层级：青绿，和折叠的橙/钢蓝区分开 */
+  .aff-openall circle{stroke:#3fd0c9;} .aff-openall text{fill:#3fd0c9;} .aff-openall-stub{stroke:#3fd0c9;}
+  .aff-openall:hover circle{fill:#3fd0c9;} .aff-openall:hover text{fill:var(--panel2);}
+  .aff-todo:hover circle{fill:#ffb84d;} .aff-todo:hover text{fill:var(--panel2);}
+  /* 折叠分支内含重点节点：在折叠卡上加提示，展开即见重点 */
+  .card.keyanc{border-color:var(--accent2); box-shadow:0 0 0 1px var(--accent2), var(--shadow);}
+  .card .keyancflag{position:absolute; top:5px; right:41px; font-size:11px; color:var(--accent2);
+    text-shadow:0 0 4px var(--bg); pointer-events:none; z-index:2;}
+  /* 画布内重点标记 = 卡片旁发散的小分支节点（见上，SVG #keyLayer 随视口缩放），已不用 HTML 浮层标签 */
+  /* 决策图节点类型（AuDHD 决策支持） */
+  .card.type-option{border-left:4px solid #6aa9ff;}
+  .card.type-dimension{border-left:4px solid #c08bff;}
+  .card.type-intuition{border:2px dashed #e0a84e; background:rgba(224,168,78,.06);}
+  .card .meta .ntype{font-size:9.5px; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:0 5px; opacity:.9; flex:0 0 auto;}
+  .card .meta .ntype.option{color:#6aa9ff; border-color:#6aa9ff;}
+  .card .meta .ntype.dimension{color:#c08bff; border-color:#c08bff;}
+  .card .meta .ntype.intuition{color:#e0a84e; border-color:#e0a84e;}
+  .edgeitem .ty.valence-for{color:#56b870; border-color:#56b870;}
+  .edgeitem .ty.valence-against{color:#e06c75; border-color:#e06c75;}
+  /* 视觉编码第二通道：尺寸 / 置信 / 兴趣（AuDHD 决策支持） */
+  .card.size-L{min-width:246px;}
+  .card.size-L .ttl{font-size:14.5px; line-height:1.3;}
+  .card.size-S{min-width:150px;}
+  .card .meta .vsize{font-size:9.5px; border:1px solid var(--line); border-radius:4px; padding:0 5px; opacity:.92; flex:0 0 auto;}
+  .card .meta .vsize.S{color:#9aa0ad; border-color:#9aa0ad;}
+  .card .meta .vsize.M{color:#6aa9ff; border-color:#6aa9ff;}
+  .card .meta .vsize.L{color:#e0a84e; border-color:#e0a84e; font-weight:600;}
+  .card .meta .vconf{font-size:9.5px; border:1px solid var(--line); border-radius:4px; padding:0 5px; flex:0 0 auto;}
+  .card .meta .vconf.hi{color:#56b870; border-color:#56b870;}
+  .card .meta .vconf.mid{color:#e0a84e; border-color:#e0a84e;}
+  .card .meta .vconf.lo{color:#e06c75; border-color:#e06c75;}
+  .card .meta .vint{font-size:9.5px; border:1px solid var(--line); border-radius:4px; padding:0 5px; flex:0 0 auto;}
+  .card .meta .vint.hi{color:#e06c75; border-color:#e06c75;}
+  .card .meta .vint.mid{color:#e0a84e; border-color:#e0a84e;}
+  .card .meta .vint.lo{color:#9aa0ad; border-color:#9aa0ad;}
+  /* 决策镜片：精要 / 贝叶斯 / 复利（只读读数，不是打分排序） */
+  .rolens{display:flex; flex-direction:column; gap:5px; padding:0; border:0; background:none;}
+  .rolens .lhead{font-size:10.5px; color:var(--muted); line-height:1.5; margin-bottom:1px;}
+  .lensrow{display:flex; gap:8px; align-items:baseline; padding:5px 8px; border-left:2px solid var(--line);
+           background:var(--panel2); border-radius:0 5px 5px 0;}
+  .lensrow .lk{font-size:10px; color:var(--muted); font-weight:600; flex:0 0 40px; letter-spacing:.3px;}
+  .lensrow .lv{font-size:11.5px; line-height:1.45; color:var(--txt);}
+  .lensrow .lv em{font-style:normal; color:var(--muted);}
+  .lensrow.pass{border-left-color:#56b870;}
+  .lensrow.cut{border-left-color:#e06c75;}
+  .lensrow.park{border-left-color:#e0a84e;}
+  .lensrow.asset{border-left-color:#56b870;}
+  .lensrow.linear{border-left-color:#6aa9ff;}
+  .lensrow.drain{border-left-color:#e06c75;}
+  /* 提问框架卡：不产读数，只在画布上摆一张清单 */
+  #fwCard{position:absolute; left:14px; bottom:58px; width:300px; max-height:58%; overflow:auto; display:none;
+          padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:var(--panel);
+          box-shadow:0 10px 26px rgba(0,0,0,.34); z-index:6;}
+  #fwCard.show{display:block;}
+  #fwCard .fw-head{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--txt);
+                   margin-bottom:6px; letter-spacing:.02em;}
+  #fwCard .fw-tag{font-size:9.5px; font-weight:500; color:var(--muted); border:1px solid var(--line);
+                  border-radius:999px; padding:0 6px;}
+  #fwCard .fw-close{margin-left:auto; cursor:pointer; color:var(--muted); font-size:11px;}
+  #fwCard .fw-close:hover{color:var(--txt);}
+  #fwCard ul{margin:0 0 6px; padding-left:16px;}
+  #fwCard li{font-size:11.5px; line-height:1.6; color:var(--txt); margin-bottom:2px;}
+  #fwCard .fw-look{font-size:10.5px; line-height:1.6; color:var(--muted); border-top:1px dashed var(--line);
+                   padding-top:6px;}
+  #fwCard .fw-look b{color:#e0a84e; font-weight:600;}
+  .lensrow.warn{border-left-color:#f4a259;}
+  .lensrow.warn .lk{color:#f4a259;}
+  .edgeitem .ty.src{font-size:9.5px; border:1px solid var(--line); border-radius:4px; padding:0 4px; color:var(--muted);}
+  .edgeitem .ty.src.L1{color:#56b870; border-color:#56b870;}
+  .edgeitem .ty.src.L2{color:#6aa9ff; border-color:#6aa9ff;}
+  .edgeitem .ty.src.L4{color:#9aa0ad; border-color:#9aa0ad;}
+  .lensrow .up{color:#56b870; font-weight:600;}
+  .lensrow .down{color:#e06c75; font-weight:600;}
+  .lensrow .flat{color:var(--muted);}
+
+  /* ---- 阶段面板内容 ---- */
+  .pickitem{padding:6px 0; border-bottom:1px dashed var(--line);}
+  .pickitem.on{background:var(--panel2); border-radius:6px; padding-left:6px;}
+  .pickitem .pk{font-size:12px; line-height:1.45; word-break:break-word;}
+  .pickitem .pk .k{display:inline-block; min-width:16px; color:var(--accent2); font-weight:600; margin-right:4px;}
+  .pickitem .pk .kstar{color:var(--accent2); font-weight:700; margin-right:3px;}
+  .pickitem .ktag{display:inline-block; font-size:10px; color:var(--accent2); border:1px solid var(--accent2);
+    border-radius:999px; padding:0 5px; margin:0 3px 2px 0; opacity:.85;}
+  .pickitem .pq{display:flex; gap:5px; margin-top:5px;}
+  .pickitem .pq button{padding:2px 8px; font-size:11px;}
+
+  /* ---- 池 / 归档区 ---- */
+  .sidebox{margin-top:auto; border-top:1px solid var(--line); padding-top:10px;}
+  .sidebox summary{cursor:pointer; font-size:13px; font-weight:600; outline:none;
+    display:flex; align-items:center; justify-content:space-between;}
+  .sidebox summary .cnt{font-size:11px; color:var(--muted); font-weight:400;}
+  .poolitem{display:flex; gap:8px; align-items:flex-start; font-size:12px; padding:5px 0;
+    border-bottom:1px dashed var(--line);}
+  .poolitem .tx{flex:1; word-break:break-word; line-height:1.45;}
+
+  /* ---- document modal ---- */
+  .docmodal{position:fixed; inset:0; background:rgba(4,8,12,.62); backdrop-filter:blur(3px);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:120;}
+  .docmodal.show{display:flex;}
+  .docbox{width:100%; max-width:1080px; height:100%; background:var(--panel);
+    border:1px solid var(--line); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.55);
+    display:flex; flex-direction:column; overflow:hidden;}
+  .dochead{display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--line);
+    background:var(--panel2); flex:0 0 auto; flex-wrap:wrap;}
+  .dochead .dt{font-weight:700; font-size:14px; line-height:1.35;}
+  .dochead .dp{font-size:11px; color:var(--muted); font-family:ui-monospace,Consolas,monospace; margin-top:2px;}
+  #docTabs button.active{background:var(--accent); color:#04222a; font-weight:700;}
+  .docbody{flex:1; min-height:0; overflow:auto; padding:20px 26px 48px;}
+  .docpane{display:none; max-width:900px; margin:0 auto;}
+  .docpane.on{display:block;}
+
+  /* ---- markdown ---- */
+  .md{font-size:14px; line-height:1.75; word-break:break-word;}
+  .md h1,.md h2,.md h3,.md h4,.md h5,.md h6{line-height:1.35; margin:22px 0 10px; font-weight:700; scroll-margin-top:12px;}
+  .md h1{font-size:22px; padding-bottom:8px; border-bottom:2px solid var(--line); margin-top:0;}
+  .md h2{font-size:18px; padding-bottom:6px; border-bottom:1px solid var(--line); color:var(--accent);}
+  .md h3{font-size:15.5px; color:var(--accent2);}
+  .md h4{font-size:14px;}
+  .md h5,.md h6{font-size:13px; color:var(--muted);}
+  .md p{margin:10px 0;}
+  .md ul,.md ol{margin:8px 0; padding-left:22px;}
+  .md li{margin:4px 0;}
+  .md blockquote{margin:12px 0; padding:8px 14px; border-left:3px solid var(--accent);
+    background:var(--panel2); border-radius:0 8px 8px 0; color:var(--muted);}
+  .md code{font-family:ui-monospace,Consolas,monospace; font-size:12.5px; background:var(--panel2);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px;}
+  .md pre{background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+    overflow-x:auto; margin:12px 0;}
+  .md pre code{background:none; border:none; padding:0; font-size:12.5px; line-height:1.6;}
+  .md table{border-collapse:collapse; margin:12px 0; font-size:13px; display:block; overflow-x:auto;}
+  .md th,.md td{border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top;}
+  .md th{background:var(--panel2); font-weight:600; white-space:nowrap;}
+  .md a{color:var(--accent);}
+  .md hr{border:none; border-top:1px solid var(--line); margin:20px 0;}
+  .md .wl{color:var(--accent2); border-bottom:1px dashed var(--accent2);}
+  .md img{max-width:100%;}
+  .md .hl{background:rgba(94,200,216,.22); border-radius:4px; transition:background .6s;}
+
+  /* ---- doc mind map（横向放射式） ---- */
+  #docMap{max-width:none; margin:0;}
+  .hm-scroll{display:inline-block; padding:6px 0 20px;}
+  .hm{display:flex; align-items:center; font-size:13.5px;}
+  .hm-node{display:inline-flex; align-items:center; padding:4px 10px; border-radius:7px;
+    border:1px solid var(--line); background:var(--panel2); cursor:pointer; line-height:1.5;
+    flex:0 0 auto; max-width:300px; word-break:break-word;}
+  .hm-node:hover{border-color:var(--accent); background:var(--card-bg);}
+  .hm-node.root{background:var(--accent); color:#04222a; font-weight:700; border-color:var(--accent);
+    cursor:default; max-width:360px;}
+  .hm-node.root[data-h]{cursor:pointer;}
+  .hm-node.cur{border-color:var(--accent2); background:rgba(244,162,89,.16);}
+  .hm-node.lv1{font-weight:700; color:var(--accent); border-color:var(--accent);}
+  .hm-node.lv2{font-weight:600;}
+  .hm-node.lv3{color:var(--accent2);}
+  .hm-node.lv4,.hm-node.lv5,.hm-node.lv6{color:var(--muted); font-size:12.5px;}
+  .hm-kids{display:flex; flex-direction:column; justify-content:center; flex:0 0 auto;
+    position:relative; padding-left:14px;}
+  .hm-kids:before{content:''; position:absolute; left:0; top:50%; width:14px; border-top:1px solid var(--line);}
+  .hm-row{display:flex; align-items:center; position:relative; padding-left:14px; min-height:30px;}
+  .hm-row:before{content:''; position:absolute; left:0; top:50%; width:14px; border-top:1px solid var(--line);}
+  .hm-row:after{content:''; position:absolute; left:0; top:0; bottom:0; border-left:1px solid var(--line);}
+  .hm-kids>.hm-row:first-child:after{top:50%;}
+  .hm-kids>.hm-row:last-child:after{bottom:50%;}
+  .hm-kids>.hm-row:only-child:after{display:none;}
+  .hm-legend{font-size:11px; color:var(--muted); margin-top:14px; padding-top:10px; border-top:1px dashed var(--line);}
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div class="tabs" id="tabs"></div>
+    <div class="spacer"></div>
+    <button class="ghost" id="btnExpandAll" title="展开整张图的全部折叠分支">⤓ 全部展开</button>
+    <button class="ghost" id="btnCtxGlobal" title="全局上下文：在每个带文档的节点旁铺出「文档大卡片」，可滚动阅读整份子弹笔记">🌐 全局上下文</button>
+    <div class="findwrap">
+      <input id="find" class="findin" type="text" autocomplete="off" spellcheck="false"
+             placeholder="找节点…（标题 / 标签 / 笔记）" title="输入即时匹配，回车跳过去">
+      <div id="findList" class="findlist"></div>
+    </div>
+    <button class="ghost" id="btnExport">导出</button>
+    <button class="ghost" id="btnHelp" title="说明（?）">?</button>
+  </div>
+  <div class="helppop" id="helpPop"><div id="modelBody"></div></div>
+</header>
+
+<div class="verbar" id="verBar">
+  <span id="verText"></span>
+  <div class="spacer"></div>
+  <button id="verLoad">载入新版</button>
+  <button id="verKeep">保留本地</button>
+</div>
+
+<main>
+  <nav id="phaseRail">
+    <button id="btnKeys" title="重点节点（重要 + 常用）· 点开看理由与清单">
+      <span class="ico">★</span><span class="lbl">重点</span><span class="cnt" id="railKeyCount">0</span>
+    </button>
+    <div class="railSep"></div>
+    <button class="pstep on" data-ph="0" title="探索：碎片先进池"><span class="no">1</span>探索</button>
+    <button class="pstep" data-ph="1" title="强化：连线 / 暂搁 / 归档，不删"><span class="no">2</span>强化</button>
+    <button class="pstep" data-ph="2" title="收敛：打通的路径自动高亮"><span class="no">3</span>收敛</button>
+    <div id="railFoot">
+      <button id="btnCollapse" title="收起 / 展开左栏（[）">◀</button>
+    </div>
+  </nav>
+
+  <div id="leftStack">
+    <section id="keyPanel">
+      <div class="kpanelhead">
+        <span>重点 <span class="cnt" id="keyCount">0</span></span>
+        <button id="btnKeysClose" class="ghost tiny" title="收起重点列表">✕</button>
+      </div>
+      <div class="phtip">按「重要（主干·高闭合·高置信·高兴趣）+ 常用（AI 协作次数）」自动排序。折叠支里的重点也会列出来——点一下展开并定位。</div>
+      <div id="keyList"></div>
+    </section>
+
+    <section id="phasePanel">
+      <div class="ph on" id="ph0">
+        <h3>碎片池 <span class="cnt" id="poolCount">0</span></h3>
+        <div class="phtip">你直接说要放什么，我加进来。这里只读。</div>
+        <div id="poolList"></div>
+      </div>
+
+      <div class="ph" id="ph1">
+        <h3>待强化 <span class="cnt" id="tidyCount">0</span></h3>
+        <div class="phtip">强化候选：成形度还低，点一条能定位，要暂搁 / 归档跟我说。</div>
+        <div id="tidyList"></div>
+      </div>
+
+      <div class="ph" id="ph2">
+        <h3>已打通的路径 <span class="cnt" id="trunkCount">0</span></h3>
+        <div class="phtip">一条链上所有节点闭合到 100%，它就自动亮起来。</div>
+        <div id="trunkList"></div>
+      </div>
+
+      <details class="sidebox" id="arcBox">
+        <summary>归档区 <span class="cnt" id="sporeCount">0</span></summary>
+        <div id="sporeList"></div>
+        <button class="ghost" id="btnExportArc" style="margin-top:8px; width:100%">导出归档 md</button>
+      </details>
+
+      <details class="sidebox" id="evBox">
+        <summary>时间线 <span class="cnt" id="evCount">0</span></summary>
+        <div id="evList"></div>
+      </details>
+    </section>
+  </div>
+
+  <div id="canvasWrap">
+    <svg id="svg">
+      <defs>
+        <!-- 箭头：与线同色；markerUnits=strokeWidth 让箭头随线宽一起变粗（权重越大越显眼） -->
+        <marker id="ah-trunk" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--accent2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ah-closed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--closed)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ah-mid" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--mid)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ah-scan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--scan)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <!-- 跨分支连线（有 weight / valence）用的箭头 -->
+        <marker id="xv-for" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#56b870" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="xv-against" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#e06c75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="xv-neutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#9aa0ad" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="xv-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.2" markerHeight="5.2"
+                markerUnits="strokeWidth" orient="auto">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <g id="viewport">
+        <g id="links">
+          <g id="treeLinks"></g>
+          <g id="xlinks"></g>
+        </g>
+        <g id="docCardLayer"></g>
+        <g id="nodes"></g>
+        <g id="keyLayer"></g>
+      </g>
+    </svg>
+    <div id="minimap" title="缩略全局图：点/拖动可跳转，白框=当前视野，橙块=折叠支里还藏着的量"></div>
+    <div id="fwCard"></div>
+    <div class="canvasbar">
+      <div class="cbar-main">
+      <div class="legend" id="legend"></div>
+      <div class="stat" id="statLine"></div>
+      <select id="lens" class="lenssel" title="投影视角">
+        <option value="all">全部</option>
+        <option value="open">未成形</option>
+        <option value="opened">已打通</option>
+        <option value="dormant">已暂搁</option>
+        <option value="orphan">还孤立着</option>
+      </select>
+      <select id="frame" class="lenssel" title="决策镜片：读数镜片看通过这一关的卡；提问框架只在图上摆清单">
+        <option value="all">镜片：关</option>
+        <optgroup label="结构镜片（从图里现算，会压暗）">
+          <option value="inv">逆向</option>
+          <option value="o2">二阶</option>
+          <option value="opp">机会成本</option>
+        </optgroup>
+        <optgroup label="判断镜片（写了判断才压暗，可无分数）">
+          <option value="ess">精要</option>
+          <option value="bayes">贝叶斯</option>
+          <option value="comp">复利</option>
+        </optgroup>
+        <optgroup label="提问框架（不压暗，只给清单）">
+          <option value="fw_fourq">四问法</option>
+          <option value="fw_pause">决策暂停</option>
+          <option value="fw_journal">反思日记</option>
+          <option value="fw_retro">复盘</option>
+          <option value="fw_3c">3C</option>
+          <option value="fw_wrap">WRAP</option>
+          <option value="fw_101010">10-10-10</option>
+          <option value="fw_matrix">决策矩阵（只查漏）</option>
+          <option value="fw_swot">SWOT</option>
+          <option value="fw_fish">鱼骨图</option>
+          <option value="fw_mece">MECE</option>
+          <option value="fw_sunk">沉没成本</option>
+          <option value="fw_status">现状偏见</option>
+          <option value="fw_prospect">前景理论</option>
+          <option value="fw_ref">参照效应</option>
+          <option value="fw_fatigue">决策疲劳</option>
+        </optgroup>
+      </select>
+      <span class="evhint" id="evHint" style="display:none" title="贝叶斯镜片下：线宽 = 权重 × 证据系数（L1 1.0 / L2 0.8 / L3 0.55 / L4 0.3）；没写 src 的线按 L3 计">证据加权</span>
+      <div class="zoomctl">
+        <button id="zoomIn">＋</button>
+        <button id="zoomOut">－</button>
+        <button id="zoomReset" title="适配宽度">⤢</button>
+        <button id="zoomAll" title="全局（整棵树）">⛶</button>
+      </div>
+      </div>
+      <div class="legend2" id="legend2"></div>
+    </div>
+
+  <aside id="inspector">
+    <button id="inspClose" class="ghost" title="关闭 (Esc)">✕</button>
+    <div class="empty" id="emptyState">
+      在画布点选一个模块<br>这里会显示它的详情与原文入口。<br><br>
+      改内容、加分支、挪位置、合并、暂搁、归档，都直接跟 AI 说。
+    </div>
+    <div id="editor" style="display:none; flex-direction:column; gap:11px;">
+      <div id="crumbs" class="crumbs" title="我在哪条路径上 · 点任一级跳回去"></div>
+      <div>
+        <h3>当前模块 <span class="addr" id="roNum"></span></h3>
+        <div class="ro rottl" id="roTitle"></div>
+        <div class="ro rotype" id="roType" style="display:none"></div>
+        <div class="ro rovis" id="roVis" style="display:none"></div>
+        <div class="ro rolens" id="roLens" style="display:none"></div>
+      </div>
+      <div>
+        <label>说明 / 论据</label>
+        <div class="ro" id="roNote"></div>
+      </div>
+      <div id="roSummaryBox" style="display:none">
+        <label>结构笔记 <span class="hint">（AI 策展：把这一簇跨分支连接串成一条叙事）</span></label>
+        <div class="ro" id="roSummary" style="white-space:pre-wrap; line-height:1.55"></div>
+      </div>
+      <div id="roTagsBox">
+        <label>标签</label>
+        <div class="ro rotags" id="roTags"></div>
+      </div>
+      <div>
+        <label><span id="closureLabel"></span> <span class="closure-val" id="cVal">0%</span></label>
+        <div class="cbar big"><div id="roBar" style="width:0%"></div></div>
+        <div class="hint" id="statusHint"></div>
+      </div>
+      <button id="btnDoc" class="primary" style="display:none">📄 打开完整文档</button>
+      <div id="roDocBox" style="display:none">
+        <h3>节点上下文 <span class="cnt" id="docCtxCount"></span></h3>
+        <div class="seg" id="docCtxTabs">
+          <button data-ctx="bullet" class="active" title="纯子弹笔记（默认）">子弹笔记</button>
+          <button data-ctx="map" title="把同一份文档以思维导图形式展开">思维导图</button>
+        </div>
+        <div class="bn-view" id="roBulletView"></div>
+        <div class="bn-view" id="roMapView" style="display:none"></div>
+      </div>
+      <div class="hint" id="foldHint" style="display:none">折叠 / 展开：点卡片旁边的 <b>▼ / ▶</b> 分支按钮。</div>
+      <div class="hint">这个模块是只读的：要改标题、说明、成形度，或者暂搁 / 归档，说一声就行。</div>
+      <div id="edgeBox">
+        <h3>跨分支连接 <span class="cnt" id="linkCnt"></span></h3>
+        <div id="edgeList"></div>
+      </div>
+    </div>
+  </aside>
+  </div>
+</main>
+
+<div class="docmodal" id="docModal">
+  <div class="docbox">
+    <div class="dochead">
+      <div style="min-width:0;">
+        <div class="dt" id="docTitle"></div>
+        <div class="dp" id="docPath"></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="seg" id="docTabs">
+        <button data-tab="raw" class="active">原文</button>
+        <button data-tab="map">思维导图</button>
+      </div>
+      <div class="seg" id="mapZoom" style="display:none" title="导图缩放">
+        <button id="mzOut">－</button>
+        <button id="mzVal" style="pointer-events:none; min-width:52px;">100%</button>
+        <button id="mzIn">＋</button>
+      </div>
+      <button class="ghost" id="docClose" title="关闭 (Esc)">✕</button>
+    </div>
+    <div class="docbody">
+      <div class="docpane on" id="docRaw"></div>
+      <div class="docpane" id="docMap"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="edgetip" id="edgeTip"></div>
+
+<script>
+"use strict";
+const svgns='http://www.w3.org/2000/svg';
+const CONFIG = /*__CONFIG__*/ null;
+const STORE_KEY = 'wb_' + (CONFIG.id || 'app') + '_v1';
+const DOCS = CONFIG.docs || {};   // docKey → {path,text,kind:'vault'|'auto'}
+const BUILT = CONFIG.builtAt || '';   // 本次生成的版本戳：与本地存档不一致时提示载入新版
+// CH 只是连线锚点用的名义高度；实际卡片含说明+走向会到 ~150，ROW 必须够，否则上下重叠
+const LEVEL=280, ROW=156, PADX=40, PADY=50;
+// 有效值随布局模式切换：四象限必须用紧凑卡，否则一个扇区放不下三张
+let CW=212, CH=140, LEV=LEVEL, ROWH=ROW;
+// web   = 分支向任意方向长出，卡片错落（默认）
+// quad  = 四象限扇开；columns = 左右两列（扁平图或旧图回退用）
+let layoutMode=(CONFIG && CONFIG.layout==='columns') ? 'columns'
+              : ((CONFIG && CONFIG.layout==='quad') ? 'quad' : 'web');
+function applyDensity(){
+  if(layoutMode==='web'){ CW=178; CH=108; LEV=250; ROWH=124; }
+  else if(layoutMode==='quad'){ CW=170; CH=104; LEV=240; ROWH=118; }
+  else { CW=212; CH=140; LEV=LEVEL; ROWH=ROW; }
+}
+const denseCard=()=> layoutMode!=='columns';
+
+function uid(){return 'n'+Math.random().toString(36).slice(2,9);}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function statusOf(c){ return c>=100?'closed':'scan'; }   // 两态：已闭合(100%) / 未闭合(0–99%)
+function statusLabel(c){ return c>=100?'已闭合':'未闭合'; }
+const NTYPE_CN={topic:'主题',option:'选项',dimension:'维度',intuition:'直觉'};
+const VSIZE_CN={S:'小',M:'中',L:'大'};
+function vSizeClass(v){ v=(v==null?'':v).toString().toUpperCase().trim(); if(v==='L'||v==='大')return 'L'; if(v==='S'||v==='小')return 'S'; return 'M'; }
+function vPct(v){ v=+v; return isNaN(v)?null:clamp(Math.round(v),0,100); }
+function vLevel(v){ v=+v; if(isNaN(v))return null; if(v>=70)return 'hi'; if(v>=40)return 'mid'; return 'lo'; }
+// 节点的文档：优先按 docKey 查集中表；兼容旧存档里的 docText
+function docOf(n){
+  if(!n) return null;
+  if(n.docKey && DOCS[n.docKey]) return DOCS[n.docKey];
+  if(n.docText) return {path:n.docPath||'', text:n.docText, kind:'vault'};
+  return null;
+}
+
+// ---- state ----
+let state = load() || seed();
+let currentId = state.projects[0].id;
+let selectedId = null;
+let view = {x:PADX, y:PADY, z:1};
+let KEY_NODES = [];   // 当前图的重点节点（computeKeyNodes 算好，左栏列表 + 画布标签层共用）
+let lens = 'all';   // 投影视角：all / open / opened / dormant
+let frame = 'all';  // 决策镜片：all / ess / bayes / comp —— 只留「通过这一关」的节点，连线按该镜片的逻辑重排
+let frameActive = true;   // 当前镜片在这张图上是否有读数（没有就不压暗）
+let frameWarned = '';     // 同一镜片只提示一次
+let ctxSprout = {mode:'off'};  // 文档大卡片（视图级，不存档）：off | 'global'（全铺所有文档卡）| 'node'（选中节点弹卡）
+
+// 证据等级（与 build_workbench.py 的 SRC_FACTOR 同口径）：L1 硬数据 / L2 观察 / L3 亲历 / L4 直觉
+const SRC_CN={1:'L1 硬数据',2:'L2 观察',3:'L3 亲历',4:'L4 直觉'};
+const SRC_F={1:1,2:0.8,3:0.55,4:0.3};   // 证据系数（与 build_workbench.py 的 SRC_FACTOR 一致）
+function projGraded(){ return ((curProj()&&curProj().edges)||[]).some(e=>e&&e.src); }
+function evFactor(e){ return projGraded() ? (SRC_F[srcOf(e).lv]||1) : 1; }
+function srcOf(e){
+  const s=e&&e.src; let lv=null, ref='';
+  if(s&&typeof s==='object'){ lv=s.level; ref=s.ref||''; }
+  else if(typeof s==='number'){ lv=s; }
+  const ok=(typeof lv==='number'&&lv>=1&&lv<=4);
+  return {lv: ok?Math.round(lv):3, ref, unrated:!ok};
+}   // 与 Python 的 _src_of() 对齐；两处口径必须一致，别只改一边
+
+// 镜片判据（唯一口径，别在别处重复写）
+function lensPass(n,f){
+  const L=n&&n._lens; if(!L) return false;
+  if(f==='ess')   return !!(L.ess && L.ess.verdict==='pass');
+  if(f==='bayes') return !!(L.bayes && L.bayes.posterior>=50);
+  if(f==='comp')  return !!(L.comp && L.comp.kind==='asset');
+  // 逆向：被挑战过 = 至少一条反对/矛盾边。没被挑战的想法被压暗，一眼看到「还没做失败测试」。
+  if(f==='inv')   return !!(L.inv && L.inv.checked);
+  // 二阶：下游没有消耗型、且至少有一个资产型。
+  if(f==='o2')    return !!(L.o2 && L.o2.drain===0 && L.o2.asset>0);
+  // 机会成本：当前分数不低于次优选项（gap>=0），即「放弃它是最贵的」。
+  if(f==='opp')   return !!(L.opp && typeof L.opp.gap==='number' && L.opp.gap>=0);
+  return true;
+}
+
+function load(){ try{ const s=localStorage.getItem(STORE_KEY); if(!s)return null; const o=JSON.parse(s); if(!o.projects||!o.projects.length)return null; ensureModel(o); hydrateDocsOn(o); return o; }catch(e){ return null; } }
+
+// 旧存档补字段：state / pool
+function ensureModel(o){
+  (o.projects||[]).forEach(p=>{
+    if(!p.edges)p.edges=[];
+    if(!p.pool)p.pool=[];
+    if(!p.events)p.events=[];
+    (function w(n){
+      n.state=n.state||'active';
+      n.also=n.also||[];
+      n.at=n.at||0;
+      (n.children||[]).forEach(w);
+    })(p.root);
+  });
+}
+
+// 旧存档（本地 localStorage）缺 trend / docText：按 title 从 CONFIG.seed 补回，避免升级后按钮消失
+function hydrateDocsOn(obj){
+  const seeds=(CONFIG.seed&&CONFIG.seed.projects)||[];
+  if(!seeds.length||!obj||!obj.projects)return;
+  obj.projects.forEach(p=>{
+    const sp=seeds.find(s=>s.name===p.name)||seeds[0];
+    if(!sp||!sp.root||!p.root)return;
+    if(!p.decision && sp.decision) p.decision=sp.decision;
+    const map={};
+    (function w(n){ map[n.title]=n; (n.children||[]).forEach(w); })(sp.root);
+    (function h(n){
+      const s=map[n.title];
+      if(s){
+        if(!n.trend && s.trend) n.trend=s.trend;
+        if(!n.docKey && s.docKey) n.docKey=s.docKey;
+        if(!n.docText && s.docText){ n.docText=s.docText; n.docPath=s.docPath; }
+        if(!n._lens && s._lens) n._lens=s._lens;    // 决策读数（构建期算好的）
+      }
+      (n.children||[]).forEach(h);
+    })(p.root);
+  });
+}
+function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){ toast('保存失败：'+e.message); } }
+
+// B：结构变更时间线（谁在什么时候被加进来、暂搁、归档）
+function logEvent(k, node){
+  const p=curProj(); if(!p) return;
+  if(!p.events) p.events=[];
+  p.events.push({t:Date.now(), k:k, id:node?node.id:null, title:node?(node.title||''):''});
+  if(p.events.length>200) p.events.shift();
+}
+const EVK={add:'新增',archive:'归档',restore:'恢复',dormant:'暂搁',active:'唤醒',reload:'载入新版'};
+function renderEvents(){
+  const box=document.getElementById('evList'); if(!box)return;
+  const all=curProj().events||[];
+  document.getElementById('evCount').textContent=all.length;
+  const evs=all.slice(-14).reverse();
+  box.innerHTML='';
+  if(!evs.length){ box.innerHTML='<div class="hint">还没有结构变更。</div>'; return; }
+  evs.forEach(e=>{
+    const d=document.createElement('div'); d.className='evitem';
+    const tm=new Date(e.t).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    d.innerHTML='<span class="t">'+tm+'</span>'+(EVK[e.k]||e.k)+(e.title?' · '+escapeHtml(e.title):'');
+    if(e.id) d.addEventListener('click',()=>{ const n=findNode(curRoot(),e.id); if(n){ selectNode(n.id); centerOn(n); } });
+    box.appendChild(d);
+  });
+}
+
+// spec 是唯一真相源：本地存档比生成的版本旧时，顶部提示
+function checkVersion(){
+  const bar=document.getElementById('verBar'); if(!bar || !BUILT)return;
+  if(!state._builtAt){
+    // 老存档没有版本信息：内容可能早就落后于 spec，让用户选一次
+    document.getElementById('verText').textContent =
+      '本地存档没有版本信息，可能不是最新（当前 spec：'+BUILT+'）';
+    bar.classList.add('show');
+    return;
+  }
+  if(state._builtAt!==BUILT){
+    document.getElementById('verText').textContent =
+      'spec 已更新（'+BUILT+'）· 本地存档是 '+state._builtAt;
+    bar.classList.add('show');
+  }
+}
+function seed(){
+  if(CONFIG.seed && CONFIG.seed.projects && CONFIG.seed.projects.length){
+    const copy = JSON.parse(JSON.stringify(CONFIG.seed));
+    const norm = n=>{ n.id=n.id||uid(); n.note=n.note||''; n.closure=(n.closure==null?0:n.closure);
+      n.tags=n.tags||''; n.collapsed=!!n.collapsed; n.state=n.state||'active';
+      n.children=n.children||[]; n.children.forEach(norm); };
+    copy._builtAt = BUILT;
+    copy.projects.forEach(p=>{
+      if(!p.pool)p.pool=[];
+      norm(p.root);
+      // alsoUnder：按 title 解析成 id（一个想法另属别的分支）
+      (function res(n){
+        if(n.alsoUnder && n.alsoUnder.length){
+          n.also=(n.also||[]).slice();
+          n.alsoUnder.forEach(t=>{ const q=findByTitle(p.root,t); if(q && q.id!==n.id) n.also.push(q.id); });
+        }
+        (n.children||[]).forEach(res);
+      })(p.root);
+      // 大树首屏先给骨架：只展开到一级（根 + 两条主干），否则双向展开 3 层会超出画布、两侧卡片被裁
+      // 展开状态存在本地，之后不会被反复折叠
+      if(countNodes(p.root) > 30){
+        (function w(n,d){ if(d>=1) n.collapsed=true; (n.children||[]).forEach(c=>w(c,d+1)); })(p.root,0);
+      }
+      const raw=p.edges||[];
+      p.edges = raw.map(e=>Object.assign({}, e, {
+        id:e.id||uid(),
+        from:e.fromId || (findByTitle(p.root,e.from)||{}).id,
+        to:e.toId   || (findByTitle(p.root,e.to)||{}).id,
+        weight:e.weight==null?60:e.weight
+      })).filter(e=>e.from&&e.to);
+    });
+    return copy;
+  }
+  const root={id:uid(),title:CONFIG.title||CONFIG.brand||'根',note:'',closure:100,tags:'',collapsed:false,children:[]};
+  return {_builtAt:BUILT, projects:[{id:'p1',name:CONFIG.title||CONFIG.brand||'项目',root}]};
+}
+function curProj(){ return state.projects.find(p=>p.id===currentId); }
+function curRoot(){ return curProj().root; }
+function findNode(n,id){ if(n.id===id)return n; for(const c of n.children||[]){const r=findNode(c,id); if(r)return r;} return null; }
+function findParent(n,id){ for(const c of n.children||[]){ if(c.id===id)return n; const r=findParent(c,id); if(r)return r; } return null; }
+function findByTitle(n,title){ if(n.title===title)return n; for(const c of n.children||[]){ const r=findByTitle(c,title); if(r)return r; } return null; }
+function kidsOf(n){ return (n.children||[]).filter(c=>c.state!=='archived'); }
+function walk(n,fn){ fn(n); for(const c of n.children||[])walk(c,fn); }
+function walkActive(n,fn){ if(n.state==='archived')return; fn(n); for(const c of n.children||[])walkActive(c,fn); }
+function eachVisible(n,fn){ fn(n); if(n.collapsed)return; kidsOf(n).forEach(c=>eachVisible(c,fn)); }
+function countNodes(n){ let c=0; walkActive(n,()=>c++); return c; }
+function avgClosure(n){ let s=0,t=0; walkActive(n,x=>{s+=x.closure;t++;}); return t?Math.round(s/t):0; }
+
+// ---- DOM refs ----
+const svg=document.getElementById('svg');
+const viewport=document.getElementById('viewport');
+const gLinks=document.getElementById('links');
+const gTree=document.getElementById('treeLinks');
+const gX=document.getElementById('xlinks');
+const gNodes=document.getElementById('nodes');
+const tabsEl=document.getElementById('tabs');
+
+// ---- 层级编号：按树位置给每个节点一个「地址」1 / 1.1 / 1.2.3 ----
+// 只作显示与对话引用；内部 id（n01…）才是连线与持久化的键，所以插节点时编号会漂，但连线不会断
+function numberTree(root){
+  (function walk(n, addr){
+    n.num = n.addr || addr;   // 有存好的 Luhmann 地址就照用（含字母后缀），否则按位置算
+    let k = 0;
+    kidsOf(n).forEach(c=>{ k++; walk(c, addr + '.' + k); });
+  })(root, '1');
+}
+
+// ---- layout：根居中，一级分支按叶子数分到左右两侧 ----
+function vkids(n){ return n.collapsed ? [] : kidsOf(n); }
+function leafCount(n){
+  const ch=vkids(n);
+  if(!ch.length) return 1;
+  return ch.reduce((s,c)=>s+leafCount(c),0);
+}
+function layout(root){
+  applyDensity();
+  if(layoutMode==='web') return layoutWeb(root);
+  if(layoutMode==='quad') return layoutQuad(root);
+  return layoutColumns(root);
+}
+
+// ---- web 布局：不是扇出 ----
+// 一级分支按体量各占一段角度（360°），但每支还有自己的角度偏置、伸展系数和逐层弧率；
+// 子树沿父方向延伸并逐层偏转，兄弟沿法线散开；最后做几轮重叠松弛 + 父子斥力。
+// 结果：卡片散在各处、各方向都能长出分支，但不会围绕中心均匀放射。
+function layoutWeb(root){
+  const branches = kidsOf(root);
+  root._x=-CW/2; root._y=-CH/2;
+  root._side=0;
+  if(!branches.length) return;
+
+  const leafs = branches.map(b=>Math.max(1,leafCount(b)));
+  const total = leafs.reduce((a,b)=>a+b,0) || 1;
+
+  // 起始角也带偏置，避免每张图都从正上方开始
+  let acc = -90 + ((branches.length*23)%50) - 10;
+
+  branches.forEach((b,i)=>{
+    const span = (leafs[i]/total)*330 + 20;              // 按体量分角度跨度
+    const jit  = (((i*47)%5)-2)*7;                       // ±14° 角度偏置（大了会和邻支撞）
+    const ang  = (acc + span*0.5 + jit) * Math.PI/180;
+    acc += span;
+    // 半径差异拉大：有的分支贴着根，有的伸得很远 —— 避免所有一级节点落在同一圈上变成「圆盘」
+    const rf    = 0.72 + ((i*37)%11)*0.085;              // 0.72 – 1.57
+    const drift = (((i*29)%7)-3)*0.055;                  // ±0.165 rad / 层：整支带弧
+    placeWeb(b, 1, ang, rf, drift, root);
+  });
+
+  // 先撑开父子距离，再做重叠松弛——顺序反过来会被「父子斥力」重新挤出一堆重叠
+  const S2 = ctxSprout.mode==='global' ? 1.7 : 1;
+  walkActive(root,n=>{
+    vkids(n).forEach(c=>{
+      const dx=(c._x+CW/2)-(n._x+CW/2), dy=(c._y+CH/2)-(n._y+CH/2);
+      const d=Math.hypot(dx,dy)||1;
+      const minD=Math.hypot(CW,CH)*0.86*S2;
+      if(d<minD){ const k=(minD-d)/d; c._x+=dx*k; c._y+=dy*k; }
+    });
+  });
+  relaxWeb(root, 80);
+}
+
+function placeWeb(n, depth, ang, rf, drift, parent){
+  // 全局上下文模式下放大节点间距（×1.7）：给贴父的文档卡预留空间，从根源避免「让位→互压」
+  const S = ctxSprout.mode==='global' ? 1.7 : 1;
+  const pcx=parent._x+CW/2, pcy=parent._y+CH/2;
+  const step=(depth===1 ? 330 : 252) * rf * S;
+  const a = ang + (depth-1)*drift;                       // 逐层偏转 → 弧形，不是直线放射
+  n._x = pcx + Math.cos(a)*step - CW/2;
+  n._y = pcy + Math.sin(a)*step - CH/2;
+  n._ang=a; n._depth=depth;
+
+  const ch=vkids(n);
+  if(!ch.length) return;
+  // 兄弟沿父方向的法线散开；子越多散得越紧
+  const spread = Math.min(0.42, 1.5/Math.max(2,ch.length+1));
+  ch.forEach((c,ci)=>{
+    // 每个子节点带自己的转向：子树可以往上下、斜向拐，而不是沿父方向一路平铺
+    const turn = (((ci*13 + depth*7) % 7) - 3) * 0.085;   // ±0.255 rad
+    placeWeb(c, depth+1, a + (ci-(ch.length-1)/2)*spread + turn, rf, drift, n);
+  });
+}
+
+// 矩形推开：卡片越密集越需要，20 轮足够；只沿重叠较小的方向推，避免整图漂移
+function relaxWeb(root, iters){
+  // 只推「可见」节点：折叠分支的子孙坐标是上一轮的残留，拉进来会把可见节点推歪
+  const nodes=[]; eachVisible(root,n=>nodes.push(n));
+  // 全局上下文模式下放大中心距阈值（给文档卡腾空间），避免节点被文档卡挤得互压
+  const S = ctxSprout.mode==='global' ? 1.7 : 1;
+  const mx=(CW+38)*S, my=(CH+38)*S;   // 中心距阈值 = 整卡宽/高 + 38px 空隙（挤在一起和重叠在视觉上是一回事）
+
+  const countOverlap=()=>{
+    let c=0;
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const dx=(nodes[i]._x-nodes[j]._x), dy=(nodes[i]._y-nodes[j]._y);
+      if(Math.abs(dx)<mx-8 && Math.abs(dy)<my-8) c++;
+    }
+    return c;
+  };
+
+  for(let round=0; round<8; round++){
+    for(let k=0;k<iters;k++){
+      let moved=false;
+      for(let i=0;i<nodes.length;i++){
+        for(let j=i+1;j<nodes.length;j++){
+          const a=nodes[i], b=nodes[j];
+          const dx=(b._x+CW/2)-(a._x+CW/2), dy=(b._y+CH/2)-(a._y+CH/2);
+          const ox=mx-Math.abs(dx), oy=my-Math.abs(dy);
+          if(ox>0 && oy>0){
+            // 沿中心连线方向推开（比单轴推更不容易卡在局部极小）
+            const d=Math.hypot(dx,dy)||1;
+            const ux=dx/d, uy=dy/d;
+            const push=Math.max(ox,oy)*0.55;
+            a._x-=ux*push; a._y-=uy*push;
+            b._x+=ux*push; b._y+=uy*push;
+            moved=true;
+          }
+        }
+      }
+      if(!moved) break;
+    }
+    if(countOverlap()===0) break;
+    // 还有重叠 → 所有非根节点沿「远离根」方向外扩一圈，再松弛；否则会被夹死在局部
+    const r=nodes[0];
+    nodes.forEach(n=>{
+      if(n===r) return;
+      const dx=(n._x+CW/2)-(r._x+CW/2), dy=(n._y+CH/2)-(r._y+CH/2);
+      const d=Math.hypot(dx,dy)||1;
+      n._x+=dx/d*16; n._y+=dy/d*16;
+    });
+  }
+}
+
+function layoutColumns(root){
+  const branches = kidsOf(root);
+  let loadL=0, loadR=0;
+  branches.forEach(c=>{
+    const w=Math.max(1, leafCount(c));
+    if(loadL<=loadR){ c._side=-1; loadL+=w; } else { c._side=1; loadR+=w; }
+  });
+  root._side=0;
+
+  let rowL=0, rowR=0;
+  // 每条一级分支自己的伸展距离与垂直偏移——不做镜像对称，避免「左右翻版」
+  function branchMeta(i){
+    const rf = 0.88 + ((i*37)%7)*0.05;    // 0.88 – 1.18：分支走得远/近各不相同
+    const dy = (((i*53)%5)-2)*15;         // -30 – +30：整体上下错开
+    const sl = (((i*29)%5)-2)*9;          // -18 – +18 / 层：整支斜着走，不是水平列
+    return {rf, dy, sl};
+  }
+  const META = new Map();
+  branches.forEach((c,i)=>META.set(c, branchMeta(i)));
+
+  function place(n, depth, m){
+    const side=n._side;
+    const rf=m.rf, dy=m.dy, sl=m.sl||0;
+    n._x = side>0 ? depth*LEV*rf : (side<0 ? -depth*LEV*rf-CW : 0);
+    const ch=vkids(n);
+    if(!ch.length){ n._y = (side<0 ? rowL++ : rowR++) * ROWH + dy + depth*sl; return; }
+    ch.forEach(c=>{ if(!c._side) c._side=side; place(c, depth+1, m); });
+    n._y = (ch[0]._y + ch[ch.length-1]._y)/2;
+  }
+  branches.forEach(c=>place(c,1,META.get(c)));
+
+  const hL=rowL*ROWH, hR=rowR*ROWH, H=Math.max(hL,hR,ROWH);
+  function shift(n,d){ n._y += d + PADY; vkids(n).forEach(c=>shift(c,d)); }
+  const dL=(H-hL)/2, dR=(H-hR)/2;
+  branches.forEach(c=>shift(c, c._side<0 ? dL : dR));
+  root._x=0; root._y=H/2+PADY;
+}
+
+// 四象限：根居中，一级分支分到 UR/UL/DR/DL；
+// 分配**不做负载均衡**（均衡会让左右两半长得一样），按顺序轮转，四区大小天然不同。
+function layoutQuad(root){
+  const branches = kidsOf(root);
+  root._side=0;
+  if(!branches.length){ root._x=-CW/2; root._y=-CH/2; return; }
+
+  const Q=[[],[],[],[]];
+  branches.forEach((c,i)=>Q[i%4].push(c));   // 轮转分配：各区数量不等，破掉对称
+
+  const SIGN=[[1,-1],[-1,-1],[1,1],[-1,1]];   // UR, UL, DR, DL
+  const rowN=[0,0,0,0];
+  const META=new Map();
+  branches.forEach((c,i)=>{
+    META.set(c, {
+      rf: 0.86 + ((i*37)%7)*0.05,          // 0.86 – 1.16 伸展距离各不相同
+      dy: (((i*53)%5)-2)*15,               // -30 – +30 垂直错开
+      sl: (((i*29)%5)-2)*9,                // -18 – +18 / 层：整支斜着长
+    });
+  });
+
+  function place(n, depth, q, m){
+    const sx=SIGN[q][0], sy=SIGN[q][1];
+    n._q=q; n._side=sx;
+    n._x = sx>0 ? depth*LEV*m.rf : -depth*LEV*m.rf-CW;
+    const ch=vkids(n);
+    if(!ch.length){
+      const r=rowN[q]++;
+      n._y = sy*(r*ROWH + (depth-1)*16) + m.dy + depth*(m.sl||0);   // 越深越外漂 + 本支偏移 + 斜度
+      return;
+    }
+    ch.forEach(c=>place(c, depth+1, q, m));
+    n._y=(ch[0]._y + ch[ch.length-1]._y)/2;
+  }
+  Q.forEach((list,q)=>list.forEach(c=>place(c,1,q,META.get(c))));
+
+  // 四组各自贴向中轴外缘，给根卡留空档
+  const gap = CH/2 + 30;
+  Q.forEach((list,q)=>{
+    if(!list.length) return;
+    let mn=Infinity, mx=-Infinity;
+    list.forEach(c=>{ (function w(n){ mn=Math.min(mn,n._y); mx=Math.max(mx,n._y); vkids(n).forEach(w); })(c); });
+    const sy=SIGN[q][1];
+    const d = sy<0 ? (-gap - mx) : (gap - mn);
+    list.forEach(c=>{ (function w(n){ n._y+=d; vkids(n).forEach(w); })(c); });
+  });
+  root._x=-CW/2; root._y=-CH/2;
+}
+
+// ---- 任意边锚点 ----
+// 从卡片中心朝目标方向，取与矩形边界的交点；同时返回该边的外法线（上/下/左/右四向之一）。
+// 连线据此从最近的那条边出/入——不再假设「只能从左右两边接线」。
+function edgePoint(n, tx, ty, pad){
+  const cx=n._x+CW/2, cy=n._y+CH/2;
+  let dx=tx-cx, dy=ty-cy;
+  if(Math.abs(dx)<0.001 && Math.abs(dy)<0.001){ dx=1; dy=0; }
+  const hw=CW/2+(pad||0), hh=CH/2+(pad||0);
+  const fx = Math.abs(dx)>0.001 ? hw/Math.abs(dx) : Infinity;
+  const fy = Math.abs(dy)>0.001 ? hh/Math.abs(dy) : Infinity;
+  const s = Math.min(fx,fy);
+  return {
+    x: cx+dx*s,
+    y: cy+dy*s,
+    nx: fx<=fy ? Math.sign(dx) : 0,
+    ny: fx<=fy ? 0 : Math.sign(dy),
+  };
+}
+
+// 通用 45° 折线：两段斜切 + 一段直段。horiz=true 走「横-竖-横」，否则「竖-横-竖」。
+function route45(x1,y1,x2,y2,horiz){
+  const dx=x2-x1, dy=y2-y1, adx=Math.abs(dx), ady=Math.abs(dy);
+  const sx=Math.sign(dx)||1, sy=Math.sign(dy)||1;
+  if(adx<0.6) return `V${y2}`;
+  if(ady<0.6) return `H${x2}`;
+  const d=Math.min(adx,ady)*0.48;
+  if(horiz){
+    const mx=(x1+x2)/2;
+    return `H${mx-sx*d} L${mx},${y1+sy*d} V${y2-sy*d} L${mx+sx*d},${y2} H${x2}`;
+  }
+  const my=(y1+y2)/2;
+  return `V${my-sy*d} L${x1+sx*d},${my} H${x2-sx*d} L${x2},${my+sy*d} V${y2}`;
+}
+
+// 完整连线：出线 → 折线 → 入线。a/b 都是 edgePoint 的结果（带法线），pad 为出/入线段长度。
+function linkPath(a, b, pad){
+  const p = pad==null ? 12 : pad;
+  const p1={x:a.x+(a.nx||0)*p, y:a.y+(a.ny||0)*p};
+  const p2={x:b.x+(b.nx||0)*p, y:b.y+(b.ny||0)*p};
+  const horiz = Math.abs(p2.x-p1.x) >= Math.abs(p2.y-p1.y);
+  let d=`M${a.x},${a.y} L${p1.x},${p1.y}`;
+  d += ' ' + route45(p1.x,p1.y,p2.x,p2.y,horiz);
+  d += ` L${b.x},${b.y}`;
+  return d;
+}
+
+// 旧版：水平进出 + 兄弟错轨（columns 布局仍在用）
+function orthoRoute(x1,y1,x2,y2,off){
+  const dx=x2-x1, dy=y2-y1, adx=Math.abs(dx), ady=Math.abs(dy);
+  if(ady<0.5) return `M${x1},${y1} H${x2}`;
+  const s=Math.sign(dx)||1, sg=Math.sign(dy)||1;
+  const room=Math.max(0, adx/2-10);
+  const o=Math.max(-room, Math.min(room, off||0));
+  const d=Math.min(ady, adx*0.35, ady/2);
+  const midX=(x1+x2)/2 + o;
+  if(d<3) return `M${x1},${y1} H${midX} V${y2} H${x2}`;
+  return `M${x1},${y1} H${midX-s*d} L${midX},${y1+sg*d} V${y2-sg*d} L${midX+s*d},${y2} H${x2}`;
+}
+
+// ---- render ----
+function render(){
+  numberTree(curRoot());
+  gTree.innerHTML=''; gX.innerHTML=''; gNodes.innerHTML='';
+  const root=curRoot();
+  const trunkSet = trunkSetOf();
+  // 重点节点：重要（主干/高闭合/高置信/高兴趣）+ 常用（AI 协作次数），恒常呈现于左栏列表 + 卡片旁发散的小分支节点
+  KEY_NODES = computeKeyNodes(root);
+  // 折叠分支内含重点：把「藏着重点节点的折叠祖先」也标出来（课题恒常性——折叠也不丢重点线索）
+  const keyAncSet = new Set();
+  KEY_NODES.forEach(({n})=>{
+    let p = findParent(root, n.id);
+    while(p){ if(p.collapsed) keyAncSet.add(p.id); p = findParent(root, p.id); }
+  });
+  // 跨分支连接数（卡片笔记法的「网络体检」：孤立卡 / 枢纽卡）
+  const linkC={};
+  (curProj().edges||[]).forEach(e=>{
+    linkC[e.from]=(linkC[e.from]||0)+1; linkC[e.to]=(linkC[e.to]||0)+1;
+  });
+  walkActive(root,n=>{ n._links = linkC[n.id]||0; });
+  // 投影视角：只点亮符合条件的那一层，其余压暗（不改结构）
+  const dimSet={};
+  const ldimSet={};   // 镜片轻压暗（.34）：被这一关划掉的卡还看得见，但退到后排
+  if(lens==='orphan') walkActive(root,n=>{ if((n._links||0)>0) dimSet[n.id]=1; });
+  else if(lens==='open') walkActive(root,n=>{ if((n.closure||0)>=100) dimSet[n.id]=1; });
+  else if(lens==='opened') walkActive(root,n=>{ if(!trunkSet[n.id]) dimSet[n.id]=1; });
+  else if(lens==='dormant') walkActive(root,n=>{ if(n.state!=='dormant') dimSet[n.id]=1; });
+  // 决策镜片：只留「通过这一关」的节点（读数用 build 期算好的 _lens，不在前端复算）
+  // 图上没有任何镜片读数时不压暗、不装作有——否则选一下镜片整张图就灰了
+  let frameHit=0;
+  if(frame!=='all'){
+    walkActive(root,n=>{ if(lensPass(n,frame)) frameHit++; });
+  }
+  frameActive = frame==='all' ? true : frameHit>0;
+  if(frameActive && frame!=='all'){
+    // 用「轻压暗」而不是投影视角那种重压暗：镜片下要看得出「谁被划掉了」，不是把它抹掉
+    walkActive(root,n=>{ if(!lensPass(n,frame)) ldimSet[n.id]=1; });
+  } else if(frame!=='all' && !frameHit && frameWarned!==frame){
+    frameWarned=frame;
+    toast('这张图没有「'+({ess:'精要',bayes:'贝叶斯',comp:'复利',inv:'逆向',o2:'二阶',opp:'机会成本'}[frame]||frame)+'」读数——先让 AI 补字段再切镜片');
+  }
+  if(selectedId) delete dimSet[selectedId];   // 当前选中的那张永不压暗
+  if(selectedId) delete ldimSet[selectedId];
+  const FM = flowMap(root), TM = trafficMap(root);   // 脉络三因子的底数（每帧算一次）
+  layout(root);
+  if(ctxSprout.mode==='node') localDocSpread(ctxSprout.nid, 1.7);   // 单节点弹卡：局部拉大邻域间隔（像全局 ×1.7，但只波及附近）
+  // 文档大卡：先收集宿主 + 布局（含「节点让位」——把被文档卡压到的真实节点推开），
+  // 必须在 links/nodes 渲染之前，否则节点让位改的坐标不会反映到已画节点上。
+  if(ctxSprout.mode!=='off'){ collectDocHosts(root); layoutDocCards(root); }
+  else { docCardHosts=[]; }   // 关闭全局上下文：清宿主表，防旧数据残留污染 fitAllCards 等
+  // links：按「父卡出线的哪条边」分组 —— 同组共用一段主干再分岔（Y 形），
+  // 不同边各自出线。于是上下左右四个方向都能接线，不再只从左右两侧进出。
+  eachVisible(root,p=>{
+    const ch = p.collapsed ? [] : kidsOf(p);
+    if(!ch.length) return;
+    const pcx=p._x+CW/2, pcy=p._y+CH/2;
+
+    // 每个子：算它在父方向上的入线锚点 + 父在它方向上的出线锚点，以及线宽/颜色
+    const items = ch.map((c,ci)=>{
+      const ccx=c._x+CW/2, ccy=c._y+CH/2;
+      const inA  = edgePoint(c, pcx, pcy);     // 子节点朝父的那条边
+      const outA = edgePoint(p, ccx, ccy);     // 父节点朝子的那条边
+      const onTrunk = !!(trunkSet[p.id] && trunkSet[c.id]);
+      const col = c.closure>=100?'var(--closed)':'var(--scan)';   // 严格两色：未闭合琥珀 / 已闭合绿（打通主干不换橙，靠「更亮 + 卡片橙框」标记）
+      const ah = c.closure>=100?'ah-closed':'ah-scan';
+      const info = FM[c.id] || {f:1,u:0};
+      const wf   = Math.min(1, Math.log2(Math.max(1,info.f)) / 4.5);
+      const stf  = c.state==='dormant' ? 0.45 : (c.state==='archived' ? 0 : 1);
+      const usef = info.u * stf;
+      const ctr  = TM.m[c.id] || 0;
+      const freqf= (TM.sum>=5)
+        ? Math.min(1, Math.log2(1+ctr)/Math.log2(1+Math.max(TM.mx,8)))
+        : 0.5;
+      const tw = (c.hw==null)
+        ? Math.min(8.0, 4.2 + 3.5*wf*(0.55 + 0.25*usef + 0.20*freqf) + 0.96*freqf)
+        : (4.2 + Math.max(0, Math.min(100, Number(c.hw))) * 0.038);  // 手工覆盖也锁在树层区间（≥跨节点线）
+      return {c,ci,ccx,ccy,inA,outA,onTrunk,col,ah,tw,info};
+    });
+
+    // 按父的出线边分组：R / L / B / T
+    const groups={};
+    items.forEach(o=>{
+      const k = o.outA.nx>0 ? 'R' : (o.outA.nx<0 ? 'L' : (o.outA.ny>0 ? 'B' : 'T'));
+      (groups[k]=groups[k]||[]).push(o);
+    });
+
+    function seg(d, w, col, op, arrow){
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', d);
+      path.setAttribute('fill','none');
+      path.setAttribute('stroke', col);
+      path.setAttribute('stroke-linejoin','round');
+      path.setAttribute('stroke-linecap','butt');
+      path.setAttribute('stroke-width', w.toFixed(2));
+      path.setAttribute('opacity', op);
+      if(arrow) path.setAttribute('marker-end','url(#'+arrow+')');
+      gTree.appendChild(path);
+    }
+    // 滚动光效：黏菌管道运输。亮芯随「流量权重」（树边实宽 tw）流动——越粗=下游越多/权重越高=滚得越快
+    function segFlow(d, dir, w, col, tw){
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', d);
+      path.setAttribute('class','eflow '+(dir==='bwd'?'eflow-bwd':'eflow-fwd'));
+      path.setAttribute('stroke', col);
+      path.setAttribute('stroke-width', w.toFixed(2));
+      path.setAttribute('stroke-dasharray','6 18');   // 更密更亮的脉冲（周期 24，与 @keyframes 偏移 -24 对齐）
+      path.setAttribute('opacity','1');
+      // 流量权重→滚动速度：线越粗（下游节点越多 / 手动层级权重越高）流得越快，像黏菌管道
+      const dur = Math.max(0.6, Math.min(1.9, 4.6/tw));
+      path.style.setProperty('--eflow-dur', dur.toFixed(2)+'s');
+      gTree.appendChild(path);
+    }
+
+    Object.keys(groups).forEach(k=>{
+      const g=groups[k];
+      // 同一条边上的出线点取平均：兄弟共用一个出发点，视觉上就是「一根主干分出去」
+      let hx=0, hy=0;
+      g.forEach(o=>{ hx+=o.outA.x; hy+=o.outA.y; });
+      hx/=g.length; hy/=g.length;
+      const nx=g[0].outA.nx, ny=g[0].outA.ny;
+      const dominant = g.reduce((a,b)=> b.tw>a.tw?b:a, g[0]);
+      const trunkW = Math.min(8.3, Math.max(...g.map(o=>o.tw))*1.15);
+      // 主干拉长到 46px 并带一点偏角：兄弟先从主干分出去，而不是在卡片边上炸成一丛
+      const stem = g.length>1 ? 46 : 0;
+      const ja = ({R:0.12, L:-0.12, T:0.15, B:-0.15})[k] || 0;
+      const ux = nx*Math.cos(ja) - ny*Math.sin(ja);
+      const uy = nx*Math.sin(ja) + ny*Math.cos(ja);
+      const Fx=hx+ux*stem, Fy=hy+uy*stem;
+
+      if(stem){ seg(`M${hx},${hy} L${Fx},${Fy}`, trunkW, dominant.col, 0.8, null); }
+
+      g.forEach(o=>{
+        const start = stem ? {x:Fx,y:Fy,nx:0,ny:0} : {x:hx,y:hy,nx:0,ny:0};
+        const collapsed=!!o.c.collapsed;
+        const dstr = linkPath(start, o.inA, 13);
+        seg(dstr,
+            collapsed?o.tw*0.7:o.tw,
+            o.col,
+            collapsed?0.45:(o.onTrunk?0.95:0.72),
+            o.ah);
+        // 滚动光效亮芯色：严格两色——未闭合琥珀亮芯、已闭合绿亮芯（打通主干靠「更亮 0.95」区分，不换色）
+        const flowCol = o.c.closure>=100 ? '#5ee6a8' : '#ffc95e';
+        if(!collapsed) segFlow(dstr, o.c.closure>=100?'bwd':'fwd', Math.max(2.2, o.tw*0.5), flowCol, o.tw);
+      });
+    });
+  });
+  // nodes
+  eachVisible(root,n=>{
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('transform',`translate(${n._x},${n._y})`);
+    const fo=document.createElementNS('http://www.w3.org/2000/svg','foreignObject');
+    fo.setAttribute('width',CW); fo.setAttribute('height',CH);
+    fo.setAttribute('overflow','visible');
+    const st=statusOf(n.closure);
+    const sel = n.id===selectedId?' sel':'';
+    const coll = n.collapsed?' collapsed':'';
+    const dorm = n.state==='dormant'?' dormant':'';
+    const trunk = trunkSet[n.id]?' trunk':'';
+    const tags = (n.tags||'').trim()?`<div class="tags">#${(n.tags||'').split(',').map(t=>t.trim()).filter(Boolean).join(' #')}</div>`:'';
+    const trend = (n.trend||'').trim()?`<div class="trend">走向 · ${escapeHtml(n.trend)}</div>`:'';
+    const dim = dimSet[n.id] ? ' dim' : '';
+    const ldim = ldimSet[n.id] ? ' ldim' : '';
+    const ntc = n.type ? ' type-'+n.type : '';
+    const ntl = n.type ? '<span class="ntype '+n.type+'">'+(NTYPE_CN[n.type]||n.type)+'</span>' : '';
+    const _sz = vSizeClass(n.size);
+    const _szl = (n.size!=null && String(n.size)!=='') ? '<span class="vsize '+_sz+'">'+(VSIZE_CN[_sz]||_sz)+'</span>' : '';
+    const _cv = vPct(n.confidence);
+    const _clc = _cv!=null ? vLevel(_cv) : null;
+    const _ccl = (_cv!=null) ? '<span class="vconf '+_clc+'">置信 '+_cv+'%</span>' : '';
+    const _iv = vPct(n.interest);
+    const _ilc = _iv!=null ? vLevel(_iv) : null;
+    const _stars = _iv!=null ? ('★'.repeat(_ilc==='hi'?3:_ilc==='mid'?2:1)) : '';
+    const _icl = (_iv!=null) ? '<span class="vint '+_ilc+'">'+_stars+' 兴趣 '+_iv+'%</span>' : '';
+    const _sc = _sz==='L' ? ' size-L' : (_sz==='S' ? ' size-S' : '');
+    fo.innerHTML=`<div class="card ${st}${sel}${coll}${dorm}${trunk}${ntc}${_sc}${dim}${ldim}${denseCard()?' dense':''}${keyAncSet.has(n.id)?' keyanc':''}" data-id="${n.id}">
+        ${keyAncSet.has(n.id)?'<span class="keyancflag" title="此折叠分支内含重点节点（展开可见）">◈</span>':''}
+        <div class="ttl">${escapeHtml(n.title||'未命名')}${n.collapsed&&(n.children&&n.children.length)?' ▸':''}</div>
+        <div class="note">${escapeHtml(n.note||'')}</div>
+        ${tags}
+        ${trend}
+        <div class="meta"><span class="nid">${n.num||''}</span>${ntl}${_szl}${_ccl}${_icl}<span class="badge ${st}">${statusLabel(n.closure)}</span><span>${n.closure}%</span></div>
+        <div class="cbar"><div style="width:${n.closure}%"></div></div>
+      </div>`;
+    g.appendChild(fo);
+    gNodes.appendChild(g);
+  });
+  const eh=document.getElementById('evHint');
+  if(eh) eh.style.display = projGraded() ? '' : 'none';
+  renderXLinks();
+  renderAlso(root);
+  applyView();
+  renderAffordanceBranches();
+  if(ctxSprout.mode!=='off'){ renderDocCards(); }   // 文档大卡片（视图级浮层，可滚动阅读）
+  else { const _dcl=document.getElementById('docCardLayer'); if(_dcl) _dcl.innerHTML=''; }   // 关闭时清掉残留卡片（不跑 renderDocCards 就没人清 layer）
+  renderBranchLegend();
+  renderMinimap();
+  bindCards();
+  renderTabs();
+  renderProgress();
+  renderPool();
+  renderArchive();
+  renderPhases();
+  renderTidyList();
+  renderTrunkList();
+  renderEvents();
+  renderKeyList();
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// 黏菌式脉络：线宽 = 承载量(子树规模) × 是否在用(闭合度×状态) × 使用频率(AI 交互次数)
+// 三者都来自已有数据或可观测行为，不需要手动打分
+function flowMap(root){
+  const m={};
+  (function rec(n){
+    let f=1, cs=(n.closure||0), cnt=1;
+    (n.children||[]).forEach(c=>{ const r=rec(c); f+=r.f; cs+=r.cs; cnt+=r.cnt; });
+    m[n.id]={f, u: cnt ? (cs/cnt/100) : 0};
+    return {f, cs, cnt};
+  })(root);
+  return m;
+}
+// AI 交互次数 = 构建期计数（内容改动 + 结构移动/连线 + 新建）+ 对话提及(aiMentions)
+// 注意：不再用运行时点击 hits 驱动线宽——人肉点击是临时注意力，AI 协作才是持久脉络。
+function trafficMap(root){
+  const m={}; let mx=0, sum=0;
+  walk(root,n=>{
+    const aiT=(Number(n.updates)||0)+(Number(n.aiMentions)||0);
+    if(aiT){ m[n.id]=aiT; sum+=aiT; }
+    if(aiT>mx) mx=aiT;
+  });
+  return {m, mx, sum};
+}
+
+
+function renderXLinks(){
+  const root=curRoot();
+  const nodes={}; walkActive(root,n=>{ nodes[n.id]=n; });
+  const vis={}; eachVisible(root,n=>{ vis[n.id]=true; });
+  const edges = curProj().edges||[];
+  edges.forEach(e=>{
+    if(!nodes[e.from]||!nodes[e.to]||!vis[e.from]||!vis[e.to]) return;
+    if(!(e.why||'').trim()) return;   // 连线是论断，不是装饰：没有理由就不画
+    const na=nodes[e.from], nb=nodes[e.to];
+    const ac={x:na._x+CW/2, y:na._y+CH/2}, bc={x:nb._x+CW/2, y:nb._y+CH/2};
+    // 跨分支 = 曲线（联想层）：三次贝塞尔，控制点沿两端卡片的**外法线**外推，
+    // 保证进出卡片是垂直的、箭头不会斜插；层级那边是折线（结构层）。两种线型 = 两种动作。
+    const A=edgePoint(na, bc.x, bc.y, 6);
+    const B=edgePoint(nb, ac.x, ac.y, 6);
+    const segLen=Math.hypot(B.x-A.x, B.y-A.y)||1;
+    const k=Math.min(segLen*0.34, 105);
+    const c1x=A.x+(A.nx||0)*k, c1y=A.y+(A.ny||0)*k;
+    const c2x=B.x+(B.nx||0)*k, c2y=B.y+(B.ny||0)*k;
+    const rawW=e.weight==null?0.6:e.weight/100;
+    const ef=evFactor(e);                  // 未分级的图 → 1（口径不变）；已分级的图 → L 系数
+    const w=rawW*ef;                        // 有效支撑力 = 权重 × 证据系数
+    const ty=e.type||'support';
+    // 跨节点线刻意细（≤1.7px）：层级线是主骨、要一直粗；跨节点是联想、细而靠『重要性→不透明度』显形
+    let col, dash=null, wd=0.7+w*1.0;
+    if(ty==='contradict'){ col='#e06c75'; dash='7 5'; wd=0.8+w*0.7; }
+    else if(ty==='same'){ col='#8b7ff0'; dash='2 4'; wd=0.8+w*0.5; }
+    else if(ty==='derive'){ col='var(--muted)'; dash='10 4'; wd=0.8+w*0.7; }
+    else { col = w>=0.66?'var(--closed)':(w>=0.33?'var(--mid)':'var(--scan)'); }
+    // 决策倾向（valence）：独立于 type 单独编码正负影响，覆写连线色
+    const VL={for:'#56b870', against:'#e06c75', neutral:'#9aa0ad'};
+    const VN={for:'正向', against:'负向', neutral:'中性'};
+    const vl=e.valence||'';
+    if(VL[vl]) col=VL[vl];
+    // 决策镜片：连线怎么显眼，随框架变（这张图没有该镜片读数时保持默认）
+    let baseOp = 0.13;   // 收敛层刻意淡：跨分支边只在点选对应节点后才亮到 0.92（2026-10-19 定：默认 0.13，选中加亮）
+    if(frameActive && frame==='bayes'){
+      if(vl==='for'||vl==='against'){
+        const lr = Math.abs(1.2*((e.weight==null?60:e.weight)*ef)/100);   // 与 Python 端 log LR 同口径（含证据系数）
+        wd = Math.min(4.5, 1.0 + lr*2.5);                            // 证据越强线越粗，但封顶在树层区间内
+        baseOp = 0.30;
+      } else { wd = 1.1; baseOp = 0.05; }                              // 没表态的线不是证据，淡出
+    } else if(frameActive && (frame==='ess'||frame==='comp')){
+      baseOp = 0.05;   // 精要/复利判的是整张卡，不是单条证据——连线退到背景
+    }
+    const on = selectedId && (e.from===selectedId || e.to===selectedId);
+    const path=document.createElementNS(svgns,'path');
+    path.setAttribute('d',`M${A.x},${A.y} C${c1x},${c1y} ${c2x},${c2y} ${B.x},${B.y}`);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke',col);
+    path.setAttribute('stroke-width', wd.toFixed(2));                 // 选中只靠不透明度(→0.92)区分，不加粗——保持树层整体最粗
+    path.setAttribute('opacity', on?'0.92':baseOp);
+    // 箭头只给**有向**关系：support（依据→结论）/ derive（源→衍生）
+    // same（等价）与 contradict（矛盾）是对称的，画箭头会凭空造出一个方向
+    if(ty!=='same' && ty!=='contradict'){
+      let mk = vl==='for' ? 'xv-for' : (vl==='against' ? 'xv-against' : (vl==='neutral' ? 'xv-neutral' : null));
+      if(!mk) mk = ty==='derive' ? 'xv-muted' : (w>=0.66?'ah-closed':(w>=0.33?'ah-mid':'ah-scan'));
+      path.setAttribute('marker-end','url(#'+mk+')');
+    }
+    if(dash) path.setAttribute('stroke-dasharray',dash);
+    else if(w<0.2) path.setAttribute('stroke-dasharray','3 4');
+    const TY={support:'支持',contradict:'矛盾',same:'等价',derive:'衍生'};
+    const S2=srcOf(e);
+    const srcTxt=' · '+(SRC_CN[S2.lv]||('L'+S2.lv))+(S2.unrated?'（未分级）':'')+(S2.ref?(' · '+S2.ref):'');
+    const tipTxt=(VN[vl]?('['+VN[vl]+'] '):'')+(TY[ty]||'支持')+' · '+(e.weight==null?60:e.weight)+'%'+srcTxt+'\n'+e.why;
+    const ttl=document.createElementNS(svgns,'title');
+    ttl.textContent=tipTxt;
+    path.appendChild(ttl);
+    gX.appendChild(path);
+
+    // 理由不写在画布上（会压在卡片上、缩放下也看不清）：悬停这条线时浮出，常驻在右侧检视器
+    path.style.pointerEvents='stroke';
+    path.addEventListener('mouseenter',ev=>showEdgeTip(ev,tipTxt));
+    path.addEventListener('mousemove',moveEdgeTip);
+    path.addEventListener('mouseleave',hideEdgeTip);
+  });
+}
+
+function showEdgeTip(ev,text){
+  const t=document.getElementById('edgeTip'); if(!t)return;
+  t.textContent=text; t.classList.add('show'); moveEdgeTip(ev);
+}
+function moveEdgeTip(ev){
+  const t=document.getElementById('edgeTip'); if(!t||!t.classList.contains('show'))return;
+  const pad=14, w=t.offsetWidth, h=t.offsetHeight;
+  let x=ev.clientX+pad, y=ev.clientY+pad;
+  if(x+w>window.innerWidth-8) x=ev.clientX-w-pad;
+  if(y+h>window.innerHeight-8) y=ev.clientY-h-pad;
+  t.style.left=x+'px'; t.style.top=y+'px';
+}
+function hideEdgeTip(){ const t=document.getElementById('edgeTip'); if(t) t.classList.remove('show'); }
+
+// C：一个想法另属别的分支——用紫色虚线连到第二/第三个父（不改树的形状）
+function renderAlso(root){
+  const vis={}; eachVisible(root,n=>{ vis[n.id]=true; });
+  const pos={}; walkActive(root,n=>{ pos[n.id]={x:n._x+CW/2, y:n._y+CH/2}; });
+  walkActive(root,n=>{
+    if(!vis[n.id]) return;
+    (n.also||[]).forEach(pid=>{
+      if(!vis[pid]||!pos[pid]) return;
+      const a=pos[pid], b=pos[n.id];
+      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+      const path=document.createElementNS(svgns,'path');
+      path.setAttribute('d',`M${a.x},${a.y} Q${mx},${my-46} ${b.x},${b.y}`);
+      path.setAttribute('fill','none');
+      path.setAttribute('stroke','#8b7ff0');
+      path.setAttribute('stroke-width','1.4');
+      path.setAttribute('stroke-dasharray','2 5');
+      path.setAttribute('opacity','.75');
+      const tt=document.createElementNS(svgns,'title');
+      const pn=findNode(root,pid);
+      tt.textContent='另属：'+(pn?pn.title:'');
+      path.appendChild(tt);
+      gX.appendChild(path);
+    });
+  });
+}
+
+function bindCards(){
+  gNodes.querySelectorAll('.card').forEach(el=>{
+    el.addEventListener('mousedown',e=>e.stopPropagation());
+    el.addEventListener('click',e=>{ e.stopPropagation(); bumpHit(el.dataset.id); selectNode(el.dataset.id); });
+    el.addEventListener('dblclick',e=>{ e.stopPropagation(); const n=findNode(curRoot(),el.dataset.id); if(n && docOf(n)) openDoc(n); });
+  });
+}
+
+// 使用频率：只记「人点开看过」，不记程序内部调用。存在 project.hits（随导出 JSON 一起走）
+function bumpHit(id){
+  if(!id) return;
+  const p=curProj(); if(!p) return;
+  if(!p.hits) p.hits={};
+  p.hits[id]=(p.hits[id]||0)+1;
+  save();
+}
+
+function applyView(){ viewport.setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.z})`); updateMinimapView(); }
+
+// 把整棵树装进视口（首屏 / 点「⤢」时用）
+function fitView(){
+  const root=curRoot();
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  eachVisible(root,n=>{
+    minX=Math.min(minX,n._x); minY=Math.min(minY,n._y);
+    maxX=Math.max(maxX,n._x+CW); maxY=Math.max(maxY,n._y+CH);
+  });
+  if(!isFinite(minX))return;
+  const r=svg.getBoundingClientRect();
+  if(!r.width||!r.height)return;
+  const pad=28;
+  const w=Math.max(1,maxX-minX);
+  // 按宽度适配：横向结构一次看全，纵向交给平移（全量适配会把卡片缩到不可读）
+  // 不强行把整棵树缩进屏幕：低于可读尺寸就保持可读，让左右溢出交给平移
+  const z=clamp((r.width-pad*2)/w,0.72,1);
+  view.z=z;
+  view.x = r.width/2;            // 根节点落在视口中央（root._x 恒为 0）
+  view.y = r.height/2 - root._y*z;
+  applyView();
+}
+
+// ---- 缩略全局图（minimap）----
+// 常驻右下角，画整棵树的缩略版 + 当前视野白框 + 折叠支的「藏量」橙块。
+// 关键取舍：折叠支内部的子孙坐标是上一轮布局的残留（没重排），直接画会画出
+// 一堆错位的假点。所以只画「可见节点」，折叠支改用一个按子孙数加权的大橙块
+// 表示「这儿还藏着多少」——位置是真的，量是真的。
+let MM_MAP=null;                     // 本帧的 树坐标 → minimap 像素 映射
+function renderMinimap(){
+  const box=document.getElementById('minimap'); if(!box) return;
+  const root=curRoot();
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  eachVisible(root,n=>{
+    minX=Math.min(minX,n._x); minY=Math.min(minY,n._y);
+    maxX=Math.max(maxX,n._x+CW); maxY=Math.max(maxY,n._y+CH);
+  });
+  // 节点太少（≤4）时缩略图没有信息量，反而不占地方
+  if(!isFinite(minX)){ box.classList.remove('show'); MM_MAP=null; return; }
+  let visN=0; eachVisible(root,()=>visN++);
+  if(visN<=4){ box.classList.remove('show'); MM_MAP=null; return; }
+  box.classList.add('show');
+  const W=box.clientWidth||196, H=box.clientHeight||132, PAD=8;
+  const iw=Math.max(1,maxX-minX), ih=Math.max(1,maxY-minY);
+  const s=Math.min((W-PAD*2)/iw,(H-PAD*2)/ih);       // 等比，整棵树都装得下
+  const ox=(W-iw*s)/2 - minX*s, oy=(H-ih*s)/2 - minY*s;   // 居中
+  const X=wx=>ox+wx*s, Y=wy=>oy+wy*s;
+  MM_MAP={s,ox,oy,toWorldX:px=>(px-ox)/s, toWorldY:py=>(py-oy)/s};
+  const keySet=new Set(KEY_NODES.map(k=>k.n.id));
+  const NS='http://www.w3.org/2000/svg';
+  let out='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">';
+  // 层级连线：先画细底，让缩略图也看得出「树」的结构
+  eachVisible(root,n=>{
+    const par=findParent(root,n.id); if(!par||par._x==null) return;
+    out+='<line x1="'+X(par._x+CW/2).toFixed(1)+'" y1="'+Y(par._y+CH/2).toFixed(1)+
+         '" x2="'+X(n._x+CW/2).toFixed(1)+'" y2="'+Y(n._y+CH/2).toFixed(1)+
+         '" stroke="var(--line)" stroke-width="0.6" opacity="0.55" fill="none"/>';
+  });
+  // 折叠支：一个按「藏了多少子孙」加权的大橙块 —— 不画内部（坐标是残留的）
+  eachVisible(root,n=>{
+    if(!n.collapsed) return;
+    let k=0; walkActive(n,x=>{ if(x!==n)k++; });
+    if(!k) return;
+    const w=Math.min(CW*s*0.9, 5+k*1.1), h=Math.min(CH*s*0.9, 4+k*0.85);
+    out+='<rect x="'+(X(n._x)+ (CW*s-w)/2).toFixed(1)+'" y="'+(Y(n._y)+ (CH*s-h)/2).toFixed(1)+
+         '" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2" fill="var(--accent2)" opacity="0.30"/>';
+  });
+  // 可见节点：小方块；重点节点额外描橙圈
+  eachVisible(root,n=>{
+    const x=X(n._x), y=Y(n._y), w=Math.max(2.4,CW*s*0.82), h=Math.max(1.8,CH*s*0.55);
+    const isKey=keySet.has(n.id);
+    out+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+
+         '" rx="1" fill="'+(isKey?'var(--accent2)':'var(--muted)')+'"'+
+         (isKey?' stroke="var(--accent2)" stroke-width="1.2" fill-opacity="0.85"':' opacity="0.5"')+'/>';
+  });
+  // 当前视野白框：把 view 变换反算回树坐标
+  out+='<rect class="mm-view" fill="rgba(94,200,216,.10)" stroke="var(--accent)" stroke-width="1.2" rx="1"/>';
+  out+='</svg><div class="mm-cap">全局 · 点一下跳转</div>';
+  box.innerHTML=out;
+  MM_MAP.vrect=box.querySelector('.mm-view');
+  updateMinimapView();
+  bindMinimap(box);
+}
+// 只更新视野白框——平移/缩放每帧都调，不能整张重建
+function updateMinimapView(){
+  if(!MM_MAP||!MM_MAP.vrect) return;
+  const r=svg.getBoundingClientRect();
+  if(!r.width||!r.height||!(view.z>0)) return;
+  const wx0=(0-view.x)/view.z, wy0=(0-view.y)/view.z;
+  const wx1=(r.width-view.x)/view.z, wy1=(r.height-view.y)/view.z;
+  const e=MM_MAP.vrect;
+  e.setAttribute('x',(MM_MAP.ox+wx0*MM_MAP.s).toFixed(1));
+  e.setAttribute('y',(MM_MAP.oy+wy0*MM_MAP.s).toFixed(1));
+  e.setAttribute('width',Math.max(3,(wx1-wx0)*MM_MAP.s).toFixed(1));
+  e.setAttribute('height',Math.max(3,(wy1-wy0)*MM_MAP.s).toFixed(1));
+}
+// 点/拖 minimap → 把该树坐标点移到视野中央
+function bindMinimap(box){
+  const jump=ev=>{
+    if(!MM_MAP) return;
+    const b=box.getBoundingClientRect();
+    const wx=MM_MAP.toWorldX(ev.clientX-b.left), wy=MM_MAP.toWorldY(ev.clientY-b.top);
+    const r=svg.getBoundingClientRect();
+    view.x=r.width/2 - wx*view.z;
+    view.y=r.height/2 - wy*view.z;
+    applyView(); updateMinimapView();
+  };
+  box.onpointerdown=ev=>{ ev.preventDefault(); jump(ev); box.setPointerCapture(ev.pointerId); };
+  box.onpointermove=ev=>{ if(ev.buttons) jump(ev); };
+  box.onpointerup=ev=>{ try{ box.releasePointerCapture(ev.pointerId); }catch(e){} };
+}
+// 跨图角标：算出每张图的重点节点数，切图之前就知道哪张图有事等着。
+// 不缓存——重点分会随 hits/aiMentions 变，切回来时必须重算。
+function tabBadges(){
+  // computeKeyNodes 内部会读 curProj()（AI 协作次数按项目存），所以要借 currentId。
+// 关键：必须把当前项目的 KEY_NODES 原样存取还原——render() 里先算好 KEY_NODES 再调
+// renderTabs()，这里若顺手清空，当前图的重点列表/★分支会全部消失（曾真的发生过）。
+  const savedId=currentId, savedNodes=KEY_NODES;
+  const counts=state.projects.map(p=>{
+    currentId=p.id;
+    KEY_NODES=computeKeyNodes(p.root);
+    return KEY_NODES.length;
+  });
+  currentId=savedId; KEY_NODES=savedNodes;
+  return counts;
+}
+
+// ---- 常驻搜索：标题 / 标签 / 笔记 实时匹配，回车走 revealNode（展开折叠祖先再定位）----
+let findHits=[], findIdx=-1;
+// normText() 复用文档搜索那套更强的归一（去标点/编号），不重复造一个弱的
+function runFind(q){
+  const box=document.getElementById('findList');
+  findHits=[]; findIdx=-1;
+  q=normText(q);
+  if(!q){ box.classList.remove('on'); box.innerHTML=''; return; }
+  const root=curRoot(), scored=[];
+  walkActive(root,n=>{
+    if(n.id===root.id) return;
+    const t=normText(n.title), g=normText(n.tags), s=normText(n.summary), note=normText(n.note);
+    let why='', sc=0;
+    if(t===q){ sc=100; why='标题完全匹配'; }
+    else if(t.indexOf(q)>=0){ sc=80-Math.min(20,t.indexOf(q)); why='标题'; }
+    else if(g&&g.indexOf(q)>=0){ sc=55; why='标签 #'+n.tags; }
+    else if(s&&s.indexOf(q)>=0){ sc=45; why='结构笔记'; }
+    else if(note&&note.indexOf(q)>=0){ sc=25; why='说明'; }
+    if(sc>0) scored.push({n,sc,why});
+  });
+  scored.sort((a,b)=>b.sc-a.sc);
+  findHits=scored.slice(0,40).map(x=>x.n);
+  if(!findHits.length){
+    box.innerHTML='<div class="findempty">这张图里没有匹配「'+escapeHtml(q)+'」的节点</div>';
+    box.classList.add('on'); return;
+  }
+  box.innerHTML='';
+  const keySet=new Set(KEY_NODES.map(k=>k.n.id));
+  findHits.forEach((n,i)=>{
+    const d=document.createElement('div');
+    d.className='finditem'+(i===0?' on':'');
+    // 面包屑：顺手告诉它「在哪儿」，因为搜索结果常常就是迷路的原因
+    const chain=[]; (function up(x){ chain.unshift(x.title||''); const p=findParent(root,x.id); if(p) up(p); })(n);
+    d.innerHTML='<div class="ft">'+escapeHtml(n.title||'未命名')+(keySet.has(n.id)?' <span style="color:var(--accent2)">★</span>':'')+'</div>'+
+                '<div class="fm">'+escapeHtml(chain.join(' › '))+'</div>'+
+                '<div class="fh">'+escapeHtml(scored[i].why)+' · 闭合 '+(n.closure||0)+'%</div>';
+    d.addEventListener('click',()=>{ revealNode(n); box.classList.remove('on'); });
+    box.appendChild(d);
+  });
+  findIdx=0;
+  box.classList.add('on');
+}
+function moveFind(d){
+  if(!findHits.length) return;
+  findIdx=(findIdx+d+findHits.length)%findHits.length;
+  const items=document.getElementById('findList').querySelectorAll('.finditem');
+  items.forEach((el,i)=>el.classList.toggle('on',i===findIdx));
+  items[findIdx]&&items[findIdx].scrollIntoView({block:'nearest'});
+}
+// 重点列表：默认收起（它只占 244px 常驻位不值），点 rail 上的 ★ 按钮才展开。
+// 保留它的理由：① 唯一给出「为什么是重点」的地方（★主干/闭合N%/AI碰N）
+//             ② 折叠支里的重点画布画不出 ★，只有这个列表看得见是哪些。
+function toggleKeyPanel(force){
+  const p=document.getElementById('keyPanel'), b=document.getElementById('btnKeys');
+  if(!p||!b) return;
+  const on=typeof force==='boolean'?force:!p.classList.contains('on');
+  p.classList.toggle('on',on);
+  b.classList.toggle('on',on);
+  b.title=(on?'收起':'展开')+'重点节点（重要 + 常用）';
+  // rail 收起时 244px 的 leftStack 是隐藏的，此时展开面板等于白点——顺手把左栏拉回来
+  if(on && document.body.classList.contains('rail-collapsed')) toggleRail(true);   // force=true → 展开左栏
+}
+
+function renderTabs(){
+  tabsEl.innerHTML='';
+  const badges=tabBadges();
+  state.projects.forEach((p,pi)=>{
+    const t=document.createElement('span');
+    t.className='tab'+(p.id===currentId?' active':'');
+    const b=badges[pi]||0;
+    t.innerHTML=escapeHtml(p.name)+(b?'<span class="tabbadge" title="这张图有 '+b+' 个重点节点（重要 + 常用）">'+b+'</span>':'');
+    t.addEventListener('click',()=>{ currentId=p.id; selectedId=null; render(); fitView(); });
+    tabsEl.appendChild(t);
+  });
+}
+
+function renderProgress(){
+  const root=curRoot();
+  let n=0, arc=0; walk(root,x=>{ n++; if(x.state==='archived')arc++; });
+  const e=document.getElementById('statLine');
+  if(e) e.textContent=n+' 节点 · 平均 '+avgClosure(root)+'% · 归档 '+arc+' · 池 '+((curProj().pool||[]).length);
+}
+
+// ---- selection / editor ----
+const LC_VERDICT={pass:'通过',cut:'归零',park:'推迟'};
+const LC_COMP={asset:'↗ 资产',linear:'→ 线性',drain:'↘ 消耗'};
+const LC_SIG={play:'玩',pain:'忍痛',allin:'全押'};
+
+// 决策镜片：精要 / 贝叶斯 / 复利 —— 只读读数，不是打分排序
+function renderLens(n){
+  const box=document.getElementById('roLens'); if(!box)return;
+  const Lz=n&&n._lens;
+  if(!Lz){ box.style.display='none'; box.innerHTML=''; return; }
+  const dec=(curProj()&&curProj().decision)||{};
+  let h='';
+  if(dec.std||dec.holesTotal){
+    const bits=[];
+    if(dec.std) bits.push('标准：'+escapeHtml(dec.std));
+    if(dec.holesTotal) bits.push('孔位 '+(dec.holesUsed||0)+'/'+dec.holesTotal);
+    h+='<div class="lhead">'+bits.join(' ｜ ')+'</div>';
+  }
+  if(Lz.ess){
+    const e=Lz.ess;
+    let v=((e.score===null||e.score===undefined)?'无分数 · ':(e.score+' 分 · '))+(LC_VERDICT[e.verdict]||e.verdict);
+    if(e.override) v+=' <em>（覆盖 90 线'+(e.reason?'：'+escapeHtml(e.reason):'，未写理由')+'）</em>';
+    else if(e.reason) v+=' <em>（'+escapeHtml(e.reason)+'）</em>';
+    h+='<div class="lensrow '+e.verdict+'"><b class="lk">精要</b><span class="lv">'+v+'</span></div>';
+  }
+  if(Lz.bayes){
+    const b=Lz.bayes;
+    const cls=b.delta>0?'up':(b.delta<0?'down':'flat');
+    const sign=(b.delta>0?'+':'')+b.delta;
+    let v=b.prior+' → <b class="'+cls+'">'+b.posterior+'</b> <span class="'+cls+'">（'+sign+'）</span>';
+    let lvs='';
+    if(b.levels){
+      const ks=Object.keys(b.levels).map(Number).sort((x,y)=>x-y);
+      lvs='（'+ks.map(k=>'L'+k+'×'+b.levels[k]).join('/')+'）';
+    }
+    v+=' <em>· 证据 '+b.n+' 条'+lvs+(b.flip?(' · 再 '+b.flip+' 条反证翻盘'):' · 已在 50% 线下方')+'</em>';
+    h+='<div class="lensrow"><b class="lk">贝叶斯</b><span class="lv">'+v+'</span></div>';
+  }
+  if(Lz.comp){
+    const c=Lz.comp;
+    let v=LC_COMP[c.kind]||c.kind;
+    if(c.horizon) v+=' · '+escapeHtml(c.horizon);
+    if(c.signal&&c.signal.length) v+=' · '+c.signal.map(s=>LC_SIG[s]||s).join('/');
+    if(c.note) v+=' <em>— '+escapeHtml(c.note)+'</em>';
+    h+='<div class="lensrow '+c.kind+'"><b class="lk">复利</b><span class="lv">'+v+'</span></div>';
+  }
+  if(Lz.inv){
+    const v=Lz.inv;
+    let s='反对 '+v.against+' 条 · 未闭合 '+v.weak+' 处 · 暂搁 '+v.shelved+' 处';
+    if(!v.checked) s='还没被挑战过（0 条反对/矛盾边）· 下游未闭合 '+v.weak+' 处';
+    if(v.worst) s+=' <em>— '+escapeHtml(v.worst)+'</em>';
+    h+='<div class="lensrow '+(v.checked?'':'warn')+'"><b class="lk">逆向</b><span class="lv">'+s+'</span></div>';
+  }
+  if(Lz.o2){
+    const o=Lz.o2;
+    const net=(o.net>0?'+':'')+o.net;
+    let s='资产 '+o.asset+' / 线性 '+o.linear+' / 消耗 '+o.drain+' <em>（净 '+net+'）</em>';
+    h+='<div class="lensrow '+(o.drain>0?'warn':'')+'"><b class="lk">二阶</b><span class="lv">'+s+'</span></div>';
+  }
+  if(Lz.opp){
+    const p=Lz.opp;
+    let s=(p.options>1?('同层 '+p.options+' 个选项 · '):'');
+    if(p.alt){
+      s+='放弃的最佳替代：'+escapeHtml(p.alt);
+      if(typeof p.gap==='number') s+='（差 '+(p.gap>0?'+':'')+p.gap+' '+(p.unit||'分')+'）';
+    }else{
+      s+='没有可比较的替代选项——先扩选项';
+    }
+    h+='<div class="lensrow '+(p.alt?'':'warn')+'"><b class="lk">机会成本</b><span class="lv">'+s+'</span></div>';
+  }
+  if(Lz.conflicts&&Lz.conflicts.length){
+    Lz.conflicts.forEach(c=>{
+      h+='<div class="lensrow warn"><b class="lk">分歧</b><span class="lv">'+escapeHtml(c.text)+'</span></div>';
+    });
+  }
+  if(!h){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='flex'; box.innerHTML=h;
+}
+
+// 提问框架：不产读数，选中后在画布上摆一张清单（镜片下拉的一部分）
+const FRAME_PROMPTS={
+  ess:{title:'精要',ask:[
+      '它值得占我 20 个孔里的一个吗？',
+      '单一标准是什么——能不能逼成一句话？',
+      '如果我现在还没投入，还会开始它吗？',
+      '90 线：不到，就归零，而不是「还不错」'],
+    look:'先看 decision.std 有没有写；再看选项的 ess（有分数用分数，没有就只写 band 三档）。'},
+  bayes:{title:'贝叶斯',ask:[
+      '我一开始怎么想（先验）？',
+      '哪些证据真的改变了我？',
+      '还要几条反证才会翻到 50% 以下？'],
+    look:'数指向该选项、且带 valence 的边；看它们的 src 等级——结论全压在 L4 上，等于没证据。'},
+  comp:{title:'复利',ask:[
+      '做完这件事，下一次会更容易吗？',
+      '边际成本在递减，还是做一次换一次？',
+      '有没有可能是消耗型（做完还倒欠）？'],
+    look:'看节点的 comp.kind；再下看一层子节点的 comp——那是二阶的事，别混。'},
+  fw_fourq:{title:'四问法',ask:[
+      '① 我现在在想什么——写一句，不修饰',
+      '② 我用的是什么框架——比价？怕失去？还人情？',
+      '③ 我跳过了什么——没查的信息、没问的人',
+      '④ 我有没有被情绪影响——焦虑→赶紧定，疲惫→维持现状，兴奋→全押'],
+    look:'note 里带「感觉 / 反正 / 就是」的节点，最需要被重新检查。'},
+  fw_pause:{title:'决策暂停',ask:[
+      '此刻的情绪是什么？',
+      '我在满足长期目标，还是在缓解当下的难受？',
+      '我默认的假设一定正确吗？'],
+    look:'先看根节点的 note 与单一标准——如果标准本身是情绪写的，后面全歪。'},
+  fw_journal:{title:'反思日记',ask:[
+      '今天哪件做得最好？',
+      '哪件可以改进？',
+      '下次遇到同样情况怎么做更高效？'],
+    look:'挑 closure 最低的一支，给它写一句「下次从这里开始」。'},
+  fw_retro:{title:'复盘',ask:[
+      '结果 vs 预期，差在哪一步？',
+      '当初哪条假设错了？',
+      '要不要把它写回节点的 note？'],
+    look:'看 state=dormant 的支——那些「先放一放」的，现在有结论了吗。'},
+  fw_3c:{title:'3C',ask:[
+      'Context：问题本质与硬约束（钱 / 身体 / 时间）是什么？',
+      'Criteria：能不能逼成一条标准（= decision.std）？',
+      'Choice：不同方案怎么比？'],
+    look:'有没有 type=dimension 的节点；没有就是「问题还没定义清楚」。'},
+  fw_wrap:{title:'WRAP',ask:[
+      'Widen：除了 A / B 还有第三条吗（「都不选」也算）？',
+      'Reality-test：哪条假设是「我以为」而不是验证过的？',
+      'Attain distance：换旁观者会怎么说？',
+      'Prepare：如果错了，代价多大、可逆吗？'],
+    look:'option 少于 3 个时，Widen 直接不合格；没有 against 边时，Prepare 是空的。'},
+  fw_101010:{title:'10-10-10',ask:[
+      '10 分钟后会怎样？',
+      '10 个月后？',
+      '10 年后？'],
+    look:'看 comp.horizon 是否分散——全挤在 1 年内，说明长期视角缺位。'},
+  fw_matrix:{title:'决策矩阵',ask:[
+      '评估维度列全了吗？',
+      '每个方案在每个维度上各是什么？',
+      '——只用来查漏，不算总分（加权总分是伪精度）'],
+    look:'数 dimension 节点，再看每个 option 是不是每条 dimension 都有边。'},
+  fw_swot:{title:'SWOT',ask:[
+      '优势 / 劣势（内部）？',
+      '机会 / 威胁（外部）？',
+      '威胁那一格最容易被跳过'],
+    look:'拿 valence=against 的边当「威胁」；一条都没有，说明威胁格是空的。'},
+  fw_fish:{title:'鱼骨图',ask:[
+      '为什么？',
+      '再问一次为什么。',
+      '直到落到一个可改的因上'],
+    look:'连续三层的节点是不是都在描述症状（情绪 / 别人的错），没有一层是动作。'},
+  fw_mece:{title:'MECE',ask:[
+      '子节点之间互不重叠吗？',
+      '合起来覆盖得住父节点吗？'],
+    look:'同一个父下有没有两张卡在说同一件事（重名 / 同义）。'},
+  fw_sunk:{title:'沉没成本',ask:[
+      '如果今天是第一天，我还会选它吗？',
+      '已经付出的是「成本」，还是「理由」？'],
+    look:'note 里带「已经 / 都投入了 / 不甘心」的节点。'},
+  fw_status:{title:'现状偏见',ask:[
+      '什么都不改，最坏会怎样？',
+      '维持现状也是一个选择，不是「没选」'],
+    look:'state=active 但 closure 低、且没有任何 against 边的卡——默认选项最不被审视。'},
+  fw_prospect:{title:'前景理论',ask:[
+      '我是不是在偏爱确定的小收益、回避不确定的大收益？',
+      '这次值得冒险吗？'],
+    look:'收益侧全是高权重但 L4 的边、而高风险选项只有 L3——典型的确定感溢价。'},
+  fw_ref:{title:'参照效应',ask:[
+      '我在跟谁比？',
+      '换成跟自己纵向比，结论会反过来吗？'],
+    look:'note 里出现具体人名 / 同龄人 / 「别人都」的节点。'},
+  fw_fatigue:{title:'决策疲劳',ask:[
+      '这个决定该不该放到明天上午？',
+      '现在几点、我睡够了吗？'],
+    look:'如果这张图是深夜建的（看存档时间），先别信今晚的结论。'}
+};
+
+// 提问框架卡：选中 fw_* 时显示在画布左下，不压暗任何卡
+function renderFwCard(){
+  const card=document.getElementById('fwCard'); if(!card) return;
+  const p=FRAME_PROMPTS[frame];
+  if(!p){ card.classList.remove('show'); card.innerHTML=''; return; }
+  card.innerHTML='<div class="fw-head">'+p.title+'<span class="fw-tag">提问框架</span>'
+    +'<span class="fw-close" title="关闭">✕</span></div>'
+    +'<ul>'+p.ask.map(q=>'<li>'+q+'</li>').join('')+'</ul>'
+    +'<div class="fw-look"><b>图上找什么</b>：'+p.look+'</div>';
+  card.classList.add('show');
+  const close=card.querySelector('.fw-close');
+  if(close){ close.onclick=()=>{ frame='all'; const sel=document.getElementById('frame'); if(sel) sel.value='all'; renderFwCard(); render(); }; }
+}
+
+function selectNode(id){
+  selectedId=id;
+  render();
+  const n=findNode(curRoot(),id); if(!n)return;
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('editor').style.display='flex';
+  document.getElementById('inspector').classList.add('show');   // 选中节点 → 右半边滑入上下文
+  document.body.classList.add('ins-open');   // minimap 跟着让位，别被盖住
+  document.getElementById('roNum').textContent = n.num || '';
+  document.getElementById('roTitle').textContent=n.title||'';
+  renderCrumbs();
+  const rt=document.getElementById('roType');
+  if(n.type){ rt.style.display='block'; rt.textContent='类型：'+(NTYPE_CN[n.type]||n.type)+(n.type==='intuition'?' · 直觉/假设（待证实）':''); }
+  else { rt.style.display='none'; rt.textContent=''; }
+  const rv=document.getElementById('roVis');
+  const _vparts=[];
+  if(n.size!=null && String(n.size)!==''){ _vparts.push('尺寸：'+(VSIZE_CN[vSizeClass(n.size)]||n.size)); }
+  const _cv2=vPct(n.confidence), _clc2=_cv2!=null?vLevel(_cv2):null;
+  if(_cv2!=null){ _vparts.push('置信：'+_cv2+'%（'+( _clc2==='hi'?'高':_clc2==='mid'?'中':'低')+'）'); }
+  const _iv2=vPct(n.interest), _ilc2=_iv2!=null?vLevel(_iv2):null;
+  if(_iv2!=null){ _vparts.push('兴趣：'+_iv2+'%（'+('★'.repeat(_ilc2==='hi'?3:_ilc2==='mid'?2:1))+'）'); }
+  if(n.hw!=null && String(n.hw)!==''){ _vparts.push('层级权重：'+n.hw+'（父→本节点的线宽）'); }
+  const _aiT=Math.max(0,(Number(n.updates)||0)+(Number(n.aiMentions)||0));
+  const _hit=Math.max(Number(n.hits)||0, Number(((curProj().hits)||{})[n.id])||0);
+  if(_aiT||_hit){
+    _vparts.push('AI交互：'+_aiT+'（改 '+(Number(n.updates)||0)+' · 提 '+(Number(n.aiMentions)||0)+'）· 人看：'+_hit);
+  }
+  if(_vparts.length){ rv.style.display='block'; rv.textContent=_vparts.join(' · '); } else { rv.style.display='none'; rv.textContent=''; }
+  renderLens(n);
+  document.getElementById('roNote').textContent=n.note||'（无说明）';
+  const sb=document.getElementById('roSummaryBox'), sv=document.getElementById('roSummary');
+  if(n.summary && n.summary.trim()){ sb.style.display='block'; sv.textContent=n.summary; }
+  else { sb.style.display='none'; sv.textContent=''; }
+  const tg=(n.tags||'').trim();
+  document.getElementById('roTags').textContent = tg ? tg.split(',').map(t=>'#'+t.trim()).filter(t=>t!=='#').join(' ') : '（无标签）';
+  document.getElementById('cVal').textContent=n.closure+'%';
+  document.getElementById('roBar').style.width=n.closure+'%';
+  const st = n.state==='dormant' ? '已暂搁' : (n.state==='archived' ? '已归档' : statusLabel(n.closure));
+  document.getElementById('statusHint').textContent='状态：'+st;
+  const bd=document.getElementById('btnDoc'), doc=docOf(n);
+  if(doc){
+    bd.style.display='block';
+    bd.textContent = doc.kind==='auto' ? '📄 打开节点上下文' : '📄 打开完整文档';
+    bd.title = (doc.path||'') + (doc.kind==='auto' ? '（自动生成）' : '');
+  } else { bd.style.display='none'; bd.title=''; }
+  // 节点上下文：子弹笔记（默认）/ 思维导图 两种形态，都在右栏检视器里
+  const docBox=document.getElementById('roDocBox');
+  if(doc){
+    const dk = n.docKey || n.docPath || doc.path || n.title;
+    const tree=getBullets(dk, doc);
+    docBox.dataset.docKey=dk;
+    docBox.style.display='block';
+    document.getElementById('docCtxCount').textContent = tree ? ('· '+countBulletNodes(tree)+' 节') : '';
+    const defTab = (docBox.dataset.tab && docBox.dataset.tab==='map') ? 'map' : 'bullet';
+    setDocCtxTab(defTab, tree, doc);
+  } else {
+    docBox.style.display='none';
+  }
+  const es=(curProj().edges||[]);
+  const eOut=es.filter(e=>e.from===n.id).length, eIn=es.filter(e=>e.to===n.id).length;
+  document.getElementById('linkCnt').textContent = (eOut+eIn)
+    ? (eOut+eIn)+' 条（出 '+eOut+' / 入 '+eIn+'）'
+    : '0 条 · 还孤立着';
+  // 折叠 / 展开的入口只在画布上的分支按钮（2026-10-20 用户要求去掉检视器里的按钮）。
+  // 这里只留一句指路，避免「这个节点明明能折叠，怎么没按钮」的困惑。
+  const fh=document.getElementById('foldHint');
+  if(fh) fh.style.display = kidsOf(n).length>0 ? '' : 'none';
+  renderEdgeList();
+}
+
+
+// 关闭右半边上下文检视器：清空选中 → 重绘（卡片高亮也跟着消失），回到空态
+// 面包屑：从根到当前节点逐级列出，点任一级 → revealNode 展开折叠祖先并定位
+function renderCrumbs(){
+  const box=document.getElementById('crumbs'); if(!box) return;
+  box.innerHTML='';
+  if(!selectedId) return;
+  const root=curRoot();
+  const chain=[];
+  (function up(n){ chain.unshift(n); if(n.id!==root.id){ const p=findParent(root,n.id); if(p) up(p); } })(findNode(root,selectedId)||root);
+  chain.forEach((n,i)=>{
+    if(i){ const s=document.createElement('span'); s.className='sep'; s.textContent='›'; box.appendChild(s); }
+    const b=document.createElement('span');
+    b.className='cb'+(i===chain.length-1?' cur':'');
+    b.textContent=n.title||'未命名';
+    if(i!==chain.length-1){
+      b.title='跳到：'+(n.title||'');
+      b.addEventListener('click',()=>revealNode(n));
+    }
+    box.appendChild(b);
+  });
+}
+
+function closeInspector(){
+  selectedId=null;
+  const ins=document.getElementById('inspector');
+  ins.classList.remove('show');
+  document.body.classList.remove('ins-open');   // minimap 回到画布右下角
+  document.getElementById('emptyState').style.display='block';
+  document.getElementById('editor').style.display='none';
+  render();
+}
+
+// ---- 三态：暂搁 / 归档 / 恢复全部由 AI 改 spec；界面只展示 ----
+function renderArchive(){
+  const box=document.getElementById('sporeList'); if(!box)return;
+  const list=[]; walk(curRoot(),n=>{ if(n.state==='archived') list.push(n); });
+  document.getElementById('sporeCount').textContent=list.length;
+  box.innerHTML='';
+  if(!list.length){ box.innerHTML='<div class="hint">空的。归档不会消失，只是离开画布。</div>'; return; }
+  list.forEach(n=>{
+    const d=document.createElement('div'); d.className='poolitem';
+    d.innerHTML='<span class="tx">'+escapeHtml(n.title||'')+'</span>';
+    box.appendChild(d);
+  });
+  box.insertAdjacentHTML('beforeend','<div class="hint">要捞回哪条，说「把 X 恢复」。</div>');
+}
+
+// ---- 碎片池：由 AI 投放，界面只读 ----
+function renderPool(){
+  const box=document.getElementById('poolList'); if(!box)return;
+  const pool=curProj().pool||[];
+  document.getElementById('poolCount').textContent=pool.length;
+  box.innerHTML='';
+  if(!pool.length){ box.innerHTML='<div class="hint">空的。想往里放什么，直接说。</div>'; return; }
+  pool.forEach(it=>{
+    const d=document.createElement('div'); d.className='poolitem';
+    d.innerHTML='<span class="tx">'+escapeHtml(it.text)+'</span>';
+    box.appendChild(d);
+  });
+}
+function exportArchive(){
+  const p=curProj();
+  const arch=[]; walk(p.root,n=>{ if(n.state==='archived') arch.push(n); });
+  const pool=p.pool||[];
+  const L=['# 归档区 · '+p.name,'','> 由工作台导出：归档节点 + 发散池碎片。',''];
+  L.push('## 已归档'); L.push('');
+  if(!arch.length) L.push('_空_');
+  arch.forEach(n=>{
+    L.push('### '+(n.title||''));
+    L.push('');
+    if(n.note) L.push(n.note);
+    if(n.trend) L.push('走向：'+n.trend);
+    const kids=(n.children||[]).map(c=>c.title).filter(Boolean);
+    if(kids.length) L.push('内含分支：'+kids.join(' / '));
+    L.push('');
+  });
+  L.push('## 发散池'); L.push('');
+  if(!pool.length) L.push('_空_');
+  pool.forEach(it=>L.push('- '+it.text));
+  L.push('');
+  const blob=new Blob([L.join('\n')],{type:'text/markdown'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='归档_'+p.name+'_'+new Date().toISOString().slice(0,10)+'.md'; a.click();
+  toast('已导出归档 md');
+}
+
+// ---- 打通路径：一条链上全部节点闭合到 100%，自动高亮 ----
+const OPEN_THRESHOLD = 100;
+function openedPaths(){
+  const out=[];
+  (function dfs(n, path){
+    const p=path.concat([n]);
+    const kids=kidsOf(n).filter(c=>c.state==='active');
+    if(!kids.length){
+      if(p.length>1 && p.every(x=>(x.closure||0)>=OPEN_THRESHOLD)) out.push(p.map(x=>x.id));
+      return;
+    }
+    kids.forEach(c=>dfs(c,p));
+  })(curRoot(), []);
+  return out;
+}
+function trunkSetOf(){
+  const s={}; openedPaths().forEach(p=>p.forEach(id=>s[id]=1)); return s;
+}
+// 展开某一支后，把「这一支的可见子树」拉进视野：宽度装得下就居中，装不下就内侧对齐
+function centerOnSubtree(n){
+  const r=svg.getBoundingClientRect();
+  if(!r.width)return;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  eachVisible(n,x=>{
+    minX=Math.min(minX,x._x); maxX=Math.max(maxX,x._x+CW);
+    minY=Math.min(minY,x._y); maxY=Math.max(maxY,x._y+CH);
+  });
+  if(!isFinite(minX))return;
+  const pad=28, w=(maxX-minX)*view.z, h=(maxY-minY)*view.z;
+  view.x = (w<=r.width-pad*2) ? (r.width-w)/2 - minX*view.z : pad - minX*view.z;
+  // 纵向：装得下就居中；装不下就顶部对齐（从这一支的第一张读起，而不是停在中间）
+  view.y = (h<=r.height-pad*2) ? (r.height-h)/2 - minY*view.z : pad - minY*view.z;
+  applyView();
+}
+function centerOn(n){
+  const r=svg.getBoundingClientRect();
+  view.x=r.width/2-(n._x+CW/2)*view.z;
+  view.y=r.height/2-(n._y+CH/2)*view.z;
+  applyView();
+}
+
+// ---- 阶段条（软提示，不禁用任何操作）----
+const PHASES=[
+  {k:'探索', tip:'碎片先进池，不评判。要放什么直接跟我说。'},
+  {k:'强化', tip:'连线、暂搁、归档，不删。'},
+  {k:'收敛', tip:'打通一条链，它会自动亮起来。'}
+];
+let phase=0;   // 0 探索 · 1 强化 · 2 收敛（软提示，独立于模式）
+function setPhase(i){
+  phase=clamp(i,0,2);
+  renderPhases();
+  toast(PHASES[phase].tip);
+}
+function renderPhases(){
+  document.querySelectorAll('#phaseRail .pstep').forEach(b=>b.classList.toggle('on', +b.dataset.ph===phase));
+  document.querySelectorAll('#phasePanel .ph').forEach(el=>el.classList.toggle('on', el.id==='ph'+phase));
+  document.body.dataset.phase=String(phase);
+}
+
+// ② 待强化：低成形
+function renderTidyList(){
+  const box=document.getElementById('tidyList'); if(!box)return;
+  const root=curRoot();
+  const list=[]; walkActive(root,n=>{
+    if(n.id===root.id || n.state!=='active')return;
+    if((n.closure||0)<=25) list.push(n);
+  });
+  document.getElementById('tidyCount').textContent=list.length;
+  box.innerHTML='';
+  if(!list.length){ box.innerHTML='<div class="hint">没有明显该放下的。</div>'; return; }
+  list.slice(0,14).forEach(n=>{
+    const d=document.createElement('div'); d.className='pickitem';
+    d.innerHTML='<div class="pk">'+escapeHtml(n.title||'')+'</div><div class="pw">成形 '+n.closure+'%</div>';
+    d.addEventListener('click',()=>{ selectNode(n.id); centerOn(n); });
+    box.appendChild(d);
+  });
+  box.insertAdjacentHTML('beforeend','<div class="hint">要暂搁或归档哪条，直接说「X 先放一放」。</div>');
+}
+
+// ③ 已打通的路径（整条链都闭合）
+function renderTrunkList(){
+  const box=document.getElementById('trunkList'); if(!box)return;
+  const ps=openedPaths();
+  document.getElementById('trunkCount').textContent=ps.length;
+  box.innerHTML='';
+  if(!ps.length){
+    box.innerHTML='<div class="hint">还没有打通的路径。把一条链上的节点都推到 100%，它会自己亮。</div>';
+    return;
+  }
+  ps.forEach((p,i)=>{
+    const names=p.map(id=>{ const n=findNode(curRoot(),id); return n?(n.title||''):''; }).filter(Boolean);
+    const d=document.createElement('div'); d.className='pickitem';
+    d.innerHTML='<div class="pk"><span class="k">'+(i+1)+'</span>'+names.map(escapeHtml).join(' › ')+'</div>';
+    d.addEventListener('click',()=>{
+      const n=findNode(curRoot(),p[p.length-1]); if(!n)return;
+      selectNode(n.id); centerOn(n);
+    });
+    box.appendChild(d);
+  });
+}
+
+// ④ 重点：重要（主干·高闭合·高置信·高兴趣）+ 常用（AI 协作次数）综合排序，取前 8
+function computeKeyNodes(root){
+  const ts = trunkSetOf();
+  const TM = trafficMap(root);
+  const maxAi = TM.mx || 1;
+  const out = [];
+  walkActive(root,n=>{
+    if(n.id===root.id) return;
+    let imp=0; const reasons=[];
+    if(ts[n.id]){ imp+=2.5; reasons.push('★主干'); }
+    if((n.closure||0)>=100){ imp+=1.4; reasons.push('闭合100%'); }
+    else if((n.closure||0)>0){ imp+=(n.closure/100)*1.4; reasons.push('闭合'+n.closure+'%'); }
+    const cv=vPct(n.confidence); if(cv!=null) imp+=(cv/100)*0.8;
+    const iv=vPct(n.interest); if(iv!=null){ imp+=(iv/100)*0.8; if(iv>=70) reasons.push('兴趣'+iv+'%'); }
+    const aiT=TM.m[n.id]||0;
+    let freq=0;
+    if(aiT>0){ freq=Math.log2(1+aiT)/Math.log2(1+Math.max(maxAi,2)); reasons.push('AI碰'+aiT); }
+    const score=imp+freq;
+    if(score>0.05){
+      if(!reasons.length && freq>0) reasons.push('常用');
+      out.push({n, score, reasons:reasons.slice(0,3)});
+    }
+  });
+  out.sort((a,b)=> b.score-a.score);
+  return out.slice(0,8);
+}
+
+function renderKeyList(){
+  const box=document.getElementById('keyList'); if(!box)return;
+  const list=KEY_NODES;
+  const c=document.getElementById('keyCount'); if(c) c.textContent=list.length;
+  const rc=document.getElementById('railKeyCount'); if(rc) rc.textContent=list.length;   // rail 角标：收起时也知道有几个
+  box.innerHTML='';
+  if(!list.length){ box.innerHTML='<div class="hint">还没浮现重点。常改 / 高闭合 / 高置信 / 高频 AI 协作的节点会自动进来。</div>'; return; }
+  list.forEach(({n,reasons})=>{
+    const d=document.createElement('div'); d.className='pickitem';
+    d.innerHTML='<div class="pk"><span class="kstar">★</span>'+escapeHtml(n.title||'')+'</div>'+
+                '<div class="pw">'+reasons.map(r=>'<span class="ktag">'+escapeHtml(r)+'</span>').join(' ')+'</div>';
+    d.addEventListener('click',()=>{ revealNode(n); });
+    box.appendChild(d);
+  });
+}
+
+// 画布内「信息 / 功能小分支」：每张可见卡按它携带的重要 / 常用信号，在卡片周围发散一圈小分支节点。
+// 分支全部画在 #keyLayer（#viewport 内 SVG 组），随视口缩放自然缩放——放大一起大、缩小一起小，绝不人为放大。
+// 分支类型：▶折叠/▼展开（功能，最常用故排第一占 0° 最近位；文件树 disclosure 三角，与卡标题的 ▸ 同一套语汇）/ ★重点 / 📄文档 / 📝笔记 / 🔗联想连线 / ✅打通路径 / ⚡待强化；
+// 每类一个独立图标+配色，点击执行对应动作。
+const AFF_LABEL={fold:'折叠 / 展开分支',openall:'展开这一支的所有层级',key:'重点节点',doc:'有对应文档',docctx:'在节点旁展开文档卡',note:'有结构笔记',link:'有联想连线',path:'在打通的路径上',todo:'待强化候选'};
+// 这棵子树里（不含自身）还有几处折叠 —— 决定「⤓ 全部展开」该不该出现
+function collapsedUnder(n){
+  let k=0;
+  (function w(x){ if(x.collapsed) k++; kidsOf(x).forEach(w); })(n);
+  return k;
+}
+function renderAffordanceBranches(){
+  const g=document.getElementById('keyLayer'); if(!g) return;
+  g.innerHTML='';
+  const NS='http://www.w3.org/2000/svg';
+  const root=curRoot();
+  const keySet=new Set(KEY_NODES.map(k=>k.n.id));
+  const pathSet=trunkSetOf();                                  // 打通路径上的节点（整条链都闭合）
+  const edges=curProj().edges||[];
+  const linkSet=new Set();
+  edges.forEach(e=>{ if((e.why||'').trim()){ linkSet.add(e.from); linkSet.add(e.to); } });  // 带论断的跨分支连线端点
+  // 角度扇：右侧优先、左右溢出，避开正上（父层级线）/ 正下（子层级线）
+  const FAN=[0,35,-35,180,215,145,55,-55,125,-125];
+  const AFF=[
+    // 折叠/展开：最高频操作 → 放FAN[0]（正右，最容易点到）。图标随状态翻转，折叠态转橙=「里面藏着东西」
+    {t:'fold', icon:n=>n.collapsed?'▶':'▼', cls:'aff-fold', state:n=>n.collapsed?' shut':'',
+     tip:n=>n.collapsed?('展开这一支（'+kidsOf(n).length+' 个子节点）'):'折叠这一支',
+     has:n=>kidsOf(n).length>0, act:n=>toggleCollapseOf(n)},
+    // 展开这一支的「全部」：只在下面还藏着折叠支时才出现（否则点开没反应＝假按钮）
+    {t:'openall', icon:'⤓', cls:'aff-openall',
+     tip:n=>'展开这一支的所有层级（下面还藏着 '+collapsedUnder(n)+' 处折叠）',
+     has:n=>collapsedUnder(n)>0,
+     act:n=>{ const k=expandSubtree(n); render(); if(k) centerOnSubtree(n); }},
+    {t:'key',  icon:'★',  cls:'aff-key',  has:n=>keySet.has(n.id),              act:n=>revealNode(n)},
+    {t:'doc',  icon:'📄', cls:'aff-doc',  has:n=>!!docOf(n),                     act:n=>openDoc(n)},
+    {t:'docctx', icon:'📑', cls:'aff-docctx', has:n=>!!docOf(n),                 act:n=>sproutDocAt(n)},
+    {t:'note', icon:'📝', cls:'aff-note', has:n=>(n.summary&&n.summary.trim()),  act:n=>selectNode(n.id)},
+    {t:'link', icon:'🔗', cls:'aff-link', has:n=>linkSet.has(n.id),              act:n=>selectNode(n.id)},
+    {t:'path', icon:'✅', cls:'aff-path', has:n=>n.id!==root.id&&pathSet[n.id],  act:n=>selectNode(n.id)},
+    {t:'todo', icon:'⚡', cls:'aff-todo', has:n=>n.id!==root.id&&(n.closure||0)<=25&&n.state==='active', act:n=>{selectNode(n.id);centerOn(n);}},
+  ];
+  eachVisible(root,n=>{
+    const isRoot=n.id===root.id;
+    let affs=AFF.filter(a=>a.has(n));
+    if(isRoot) affs=affs.filter(a=>a.t==='fold');               // 根只给「折叠/展开」——一键收起整张大图
+    if(!affs.length) return;
+    const card=gNodes.querySelector('[data-id="'+n.id+'"]');
+    if(!card) return;                                           // 折叠支里的卡没渲染 → 不画（用折叠卡 ◈ 提示）
+    const cx=n._x+CW/2, cy=n._y+CH/2, hw=CW/2, hh=CH/2;          // 卡片中心 + 半宽半高
+    affs.forEach((a,i)=>{
+      const cls=a.cls+(a.state?a.state(n):'');
+      const icon=typeof a.icon==='function'?a.icon(n):a.icon;
+      const tip=(a.tip?a.tip(n):AFF_LABEL[a.t])+' · '+(n.title||'');
+      const ang=FAN[i%FAN.length]*Math.PI/180, dx=Math.cos(ang), dy=Math.sin(ang);
+      const tx=dx!==0?hw/Math.abs(dx):Infinity, ty=dy!==0?hh/Math.abs(dy):Infinity;
+      const t=Math.min(tx,ty);                                  // 射线与矩形边框交点 → 出口点
+      const ex=cx+dx*t, ey=cy+dy*t, R=15;
+      const bx=ex+dx*R, by=ey+dy*R;                             // 分支节点中心
+      const ln=document.createElementNS(NS,'line');
+      ln.setAttribute('x1',ex.toFixed(1)); ln.setAttribute('y1',ey.toFixed(1));
+      ln.setAttribute('x2',bx.toFixed(1)); ln.setAttribute('y2',by.toFixed(1));
+      ln.setAttribute('class','aff-stub '+a.cls+'-stub'+(a.state?' '+a.state(n).trim()+'-stub':''));
+      g.appendChild(ln);
+      const grp=document.createElementNS(NS,'g');
+      grp.setAttribute('class','affnode '+cls);
+      grp.setAttribute('transform','translate('+bx.toFixed(1)+','+by.toFixed(1)+')');
+      const tt=document.createElementNS(NS,'title'); tt.textContent=tip; grp.appendChild(tt);
+      const c=document.createElementNS(NS,'circle'); c.setAttribute('r',7); grp.appendChild(c);
+      const tx2=document.createElementNS(NS,'text'); tx2.setAttribute('text-anchor','middle');
+      tx2.setAttribute('dominant-baseline','central'); tx2.textContent=icon; grp.appendChild(tx2);
+      grp.addEventListener('click',e=>{ e.stopPropagation(); a.act(n); });
+      g.appendChild(grp);
+    });
+  });
+}
+
+function overlapArea(a,b){
+  const ox=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x);
+  const oy=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);
+  return (ox>0&&oy>0)?ox*oy:0;
+}
+function renderEdgeList(){
+  const box=document.getElementById('edgeList'); if(!box)return; box.innerHTML='';
+  const edges=curProj().edges||[];
+  const inc=edges.filter(e=>e.from===selectedId||e.to===selectedId);
+  if(!selectedId||!inc.length){ box.innerHTML='<div class="hint">暂无跨节点连线。要加或改，跟我说。</div>'; return; }
+  inc.forEach(e=>{
+    const otherId = e.from===selectedId? e.to : e.from;
+    const other = findNode(curRoot(), otherId);
+    const item=document.createElement('div'); item.className='edgeitem';
+    const TY={support:'支持',contradict:'矛盾',same:'等价',derive:'衍生'};
+    const VN={for:'正向',against:'负向',neutral:'中性'};
+    const ty=e.type||'support';
+    const vl=e.valence||'';
+    const vchip = vl ? ' <i class="ty valence-'+vl+'">'+(VN[vl]||vl)+'</i>' : '';
+    const S=srcOf(e);
+    const schip = ' <i class="ty src L'+S.lv+'" title="'+(S.ref?escapeHtml(S.ref):'未写来源')+(S.unrated?'（未分级，按 L3 计）':'')+'">L'+S.lv+(S.unrated?'*':'')+'</i>';
+    item.innerHTML='<div class="el1"><span class="et">→ '+escapeHtml(other? other.title : '(丢失)')+
+      ' <i class="ty '+ty+'">'+(TY[ty]||'支持')+'</i>'+vchip+schip+'</span>'+
+      '<span class="w">'+(e.weight==null?60:e.weight)+'%</span></div>'+
+      '<div class="ew">'+escapeHtml(e.why||'（未说明为什么连）')+'</div>';
+    box.appendChild(item);
+  });
+}
+// 折叠/展开一支：给画布上的 ▶/▼ 分支按钮用（可直接作用于节点，不必先选中）
+function toggleCollapseOf(n){
+  if(!n || !kidsOf(n).length) return;
+  bumpHit(n.id);                        // 展开/折叠也是「走过这条路径」
+  const wasCollapsed=n.collapsed;
+  n.collapsed=!n.collapsed; save(); render();
+  if(!n.collapsed) centerOnSubtree(n);  // 展开后把这一支整段拉进视野
+  return !wasCollapsed;                 // 返回展开后的状态
+}
+// 展开一支 = 把这个节点下面所有层级的折叠支全部打开（不是只开一层）
+// 返回真正被展开的折叠支数量
+function expandSubtree(n){
+  if(!n) return 0;
+  let k=0;
+  (function w(x){
+    if(x.collapsed){ x.collapsed=false; k++; }
+    kidsOf(x).forEach(w);
+  })(n);
+  if(k){ save(); }
+  return k;
+}
+// 整张图全部展开
+function expandAll(thenFit){
+  const root=curRoot(); if(!root) return 0;
+  let k=0;
+  (function w(x){
+    if(x.collapsed){ x.collapsed=false; k++; }
+    kidsOf(x).forEach(w);
+  })(root);
+  save(); render();
+  if(thenFit!==false){
+    // 全局上下文开着时，fit 范围要含文档卡，否则 32 张卡全铺开后全在视野外
+    if(ctxSprout.mode!=='off' && docCardHosts.length) fitAllCards();
+    else fitView();
+  }
+  return k;
+}
+// 从重点列表跳过去：把通往该重点节点的折叠祖先全部展开，再定位（课题恒常性——一次点开就见到重点）
+function revealNode(n){
+  if(!n) return;
+  const r=curRoot();
+  let p=findParent(r,n.id);
+  while(p){ p.collapsed=false; p=findParent(r,p.id); }
+  selectNode(n.id);
+  centerOn(n);
+}
+
+// ---- document viewer：完整文档 + 从标题层级自动生成的导图 ----
+let docNode=null, mapZoom=1;
+
+function mdInline(s){
+  let t=escapeHtml(s);
+  t=t.replace(/`([^`]+)`/g,'<code>$1</code>');
+  t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+  t=t.replace(/__([^_]+)__/g,'<b>$1</b>');
+  t=t.replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<i>$2</i>');
+  t=t.replace(/~~([^~]+)~~/g,'<s>$1</s>');
+  t=t.replace(/\[\[([^\]]+)\]\]/g,'<span class="wl">$1</span>');
+  t=t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  return t;
+}
+
+function mdToHtml(md){
+  const lines=(md||'').replace(/\r\n?/g,'\n').replace(/^\uFEFF/,'').split('\n');
+  let out=[], i=0, hidx=0;
+  while(i<lines.length){
+    const ln=lines[i];
+    if(/^\s*```/.test(ln)){
+      i++; const buf=[];
+      while(i<lines.length && !/^\s*```/.test(lines[i])){ buf.push(lines[i]); i++; }
+      i++;
+      out.push('<pre><code>'+escapeHtml(buf.join('\n'))+'</code></pre>');
+      continue;
+    }
+    if(/^\s*<!--/.test(ln)){
+      while(i<lines.length && !/-->/.test(lines[i])) i++;
+      i++; continue;
+    }
+    if(!ln.trim()){ i++; continue; }
+    if(/^\s*([-*_])\1{2,}\s*$/.test(ln)){ out.push('<hr>'); i++; continue; }
+    const m=ln.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if(m){
+      const lv=m[1].length;
+      out.push('<h'+lv+' id="dh'+(hidx++)+'">'+mdInline(m[2])+'</h'+lv+'>');
+      i++; continue;
+    }
+    if(ln.indexOf('|')>=0 && i+1<lines.length && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i+1])){
+      const cells=r=>r.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(s=>s.trim());
+      const head=cells(ln); i+=2;
+      const body=[];
+      while(i<lines.length && lines[i].trim() && lines[i].indexOf('|')>=0){ body.push(cells(lines[i])); i++; }
+      out.push('<table><thead><tr>'+head.map(c=>'<th>'+mdInline(c)+'</th>').join('')+'</tr></thead><tbody>'+
+        body.map(r=>'<tr>'+r.map(c=>'<td>'+mdInline(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>');
+      continue;
+    }
+    if(/^\s*>\s?/.test(ln)){
+      const buf=[];
+      while(i<lines.length && /^\s*>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^\s*>\s?/,'')); i++; }
+      out.push('<blockquote>'+buf.map(mdInline).join('<br>')+'</blockquote>');
+      continue;
+    }
+    if(/^\s*[-*+]\s+/.test(ln)){
+      const buf=[];
+      while(i<lines.length && /^\s*[-*+]\s+/.test(lines[i])){ buf.push(lines[i].replace(/^\s*[-*+]\s+/,'')); i++; }
+      out.push('<ul>'+buf.map(x=>'<li>'+mdInline(x)+'</li>').join('')+'</ul>');
+      continue;
+    }
+    if(/^\s*\d+[.)]\s+/.test(ln)){
+      const buf=[];
+      while(i<lines.length && /^\s*\d+[.)]\s+/.test(lines[i])){ buf.push(lines[i].replace(/^\s*\d+[.)]\s+/,'')); i++; }
+      out.push('<ol>'+buf.map(x=>'<li>'+mdInline(x)+'</li>').join('')+'</ol>');
+      continue;
+    }
+    const buf=[];
+    while(i<lines.length){
+      const l=lines[i];
+      if(!l.trim())break;
+      if(/^\s*(```|#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s)/.test(l))break;
+      if(/^\s*([-*_])\1{2,}\s*$/.test(l))break;
+      if(l.indexOf('|')>=0 && i+1<lines.length && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i+1]))break;
+      buf.push(l); i++;
+    }
+    if(buf.length) out.push('<p>'+mdInline(buf.join(' '))+'</p>');
+    else i++;
+  }
+  return '<div class="md">'+out.join('\n')+'</div>';
+}
+
+// 与 mdToHtml 的标题编号（dh0, dh1…）严格同序
+// 把文档拆成「标题 + 该节完整正文」的层级树。
+// 与 docHeadings() 的区别：那个只要标题（给文档弹层的导图用）；这个要正文，
+// 因为「展开成导图」的诉求是**详尽上下文、不删改**。
+function docSections(md){
+  const lines=(md||'').replace(/\r\n?/g,'\n').split('\n');
+  const hs=[]; let i=0, idx=0, cur=null;
+  const flush=()=>{ if(cur){ cur.body=(cur.body.join('\n')).replace(/\n{3,}/g,'\n\n').trim(); } };
+  while(i<lines.length){
+    const l=lines[i];
+    if(/^\s*```/.test(l)){                       // 代码块整段收进正文，不当标题
+      const buf=[]; buf.push(l); i++;
+      while(i<lines.length && !/^\s*```/.test(lines[i])){ buf.push(lines[i]); i++; }
+      if(i<lines.length) buf.push(lines[i]);
+      i++; if(cur) cur.body.push(buf.join('\n'));
+      continue;
+    }
+    if(/^\s*<!--/.test(l)){ while(i<lines.length && !/-->/.test(lines[i])) i++; i++; continue; }
+    const m=l.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if(m){
+      flush();
+      hs.push({lv:m[1].length, text:m[2].trim(), id:'dh'+(idx++), body:[], children:[]});
+      cur=hs[hs.length-1];
+    }else if(cur){ cur.body.push(l); }
+    i++;
+  }
+  flush();
+  if(!hs.length) return null;
+  const minLv=Math.min.apply(null,hs.map(h=>h.lv));
+  const root={lv:0, text:'', body:'', children:[]};
+  const stack=[root];
+  hs.forEach(h=>{
+    const lv=h.lv-minLv+1;
+    const node={lv:lv, text:h.text, body:h.body, id:h.id, children:[]};
+    while(stack.length>1 && stack[stack.length-1].lv>=lv) stack.pop();
+    stack[stack.length-1].children.push(node);
+    stack.push(node);
+  });
+  // 顶层第一个标题往往等于文档名（自动上下文文档就是这样），提上来当根避免重复两层
+  if(root.children.length===1 && root.children[0].lv===1 && root.children[0].children.length){
+    const top=root.children[0];
+    top.lv=0;
+    return top;
+  }
+  return root;
+}
+
+// ---- 节点上下文：文档 ⇄ 子弹笔记 ----
+// 文档在「打开上下文」时以两种形态呈现：纯子弹笔记（默认）/ 思维导图（标题树）。
+// 子弹笔记是规范存储形态（docBullets 解析一次后缓存进 state.docBullets，存档即含子弹笔记），
+// 每节记录「关系编码」：映射到思维导图里哪些节点（复用地图存档的 num 地址 + 内部 id），
+// 以及 section 面包屑 / 字数 / 源路径等「其他信息」。
+
+function docBodyPlain(b){
+  // 去掉 markdown 记号但**不删内容**：代码围栏保留、列表符号保留，只清纯格式字符
+  return String(b||'').replace(/`{1,3}/g,'').replace(/\*\*|__/g,'').replace(/^\s{0,3}#{1,6}\s+/gm,'').trim();
+}
+function wordCount(s){
+  s=String(s||'');
+  const cjk=(s.match(/[一-鿿]/g)||[]).length;
+  const words=(s.match(/[A-Za-z0-9]+/g)||[]).length;
+  return cjk+words;
+}
+// 内联关系标记：在标题/正文里写 →[节点名] 钉死「这一节映射到某节点」
+function stripInline(t){ return String(t||'').replace(/→\s*\[[^\]]+\]/g,'').trim(); }
+function parseInline(t){
+  const out=[]; const re=/→\s*\[([^\]]+)\]/g; let m;
+  while((m=re.exec(t))){ out.push(m[1].trim()); }
+  return out;
+}
+// 按标题（归一化）在全图找节点；相似度够高才返回
+function findNodeByTitle(t){
+  const q=normText(t); if(!q) return null;
+  let best=null, bs=0;
+  walk(curRoot(), n=>{
+    if(n.id===curRoot().id) return;
+    const s=simTitle(q, normText(n.title||''));
+    if(s>bs){ bs=s; best=n; }
+  });
+  return (best && bs>=0.7) ? best : null;
+}
+// 自动关系编码：把一节（标题 + 正文）跟全图节点按相似度匹配，返回 top 命中
+function matchNodesToBullet(text, body){
+  const root=curRoot(), q=normText(text);
+  const needles=needlesOf({title:text, note:body||''});   // 复用现成关键词抽取
+  const cand=[];
+  walk(root, n=>{
+    if(n.id===root.id) return;
+    const nt=normText(n.title||'');
+    let s=simTitle(q, nt);
+    let hit=0; needles.forEach(nd=>{ if(nt.indexOf(nd)>=0) hit++; });   // 正文回落
+    if(hit) s=Math.max(s, 0.55 + Math.min(0.25, hit*0.06));
+    if(s>=0.5) cand.push({id:n.id, num:n.num||'', title:n.title||'', score:+s.toFixed(2)});
+  });
+  cand.sort((a,b)=>b.score-a.score);
+  return cand.slice(0,3);
+}
+// 把文档解析成子弹笔记树：每个节点 = 一节，含 maps（关系编码）+ info（其他信息）
+function docBullets(md){
+  const tree=docSections(md);
+  if(!tree) return null;
+  const breadcrumb=[];
+  function conv(n, depth){
+    const rawText=n.text||'';
+    const rawBody=docBodyPlain(n.body);
+    const b={
+      lv:depth,
+      text:stripInline(rawText),
+      body:stripInline(rawBody),
+      children:[],
+      maps:[],
+      info:{ section:breadcrumb.join(' › '), words:wordCount(rawBody), src:'' }
+    };
+    // 1) 内联标记优先（标题或正文里写 →[节点名] 都算，精确覆盖）
+    parseInline(rawText).concat(parseInline(rawBody)).forEach(t=>{
+      const m=findNodeByTitle(t);
+      if(m && !b.maps.some(x=>x.id===m.id)) b.maps.push({id:m.id, num:m.num||'', title:m.title||'', rel:'标注', score:1, explicit:true});
+    });
+    // 2) 自动匹配（复用地图存档的节点地址编码 num + 内部 id）
+    matchNodesToBullet(rawText, n.body).forEach(a=>{
+      if(!b.maps.some(x=>x.id===a.id)) b.maps.push(Object.assign({rel:'相关'}, a));
+    });
+    breadcrumb.push(rawText);
+    (n.children||[]).forEach(c=> b.children.push(conv(c, depth+1)));
+    breadcrumb.pop();
+    return b;
+  }
+  return conv(tree, 0);
+}
+function tagSrc(node, src){
+  if(!node) return;
+  node.info=node.info||{}; node.info.src=src||node.info.src;
+  (node.children||[]).forEach(c=>tagSrc(c, src));
+}
+// 缓存进 state.docBullets（按 doc.text 长度校验，文档变了自动重算）。
+// 这就是「存成子弹笔记」：解析结果随存档一起落地，重载即命中、不重算，也不因改图而残留。
+function getBullets(docKey, doc){
+  if(!docKey || !doc) return null;
+  state.docBullets = state.docBullets || {};
+  const L=(doc.text||'').length;
+  const hit=state.docBullets[docKey];
+  if(hit && hit.len===L && hit.tree) return hit.tree;
+  const tree=docBullets(doc.text);
+  if(tree) tagSrc(tree, doc.path||'');
+  state.docBullets[docKey]={len:L, tree:tree};
+  try{ save(); }catch(e){}
+  return tree;
+}
+// ---- 右栏检视器：节点上下文（子弹笔记 / 思维导图 两种形态） ----
+function renderCtxBullet(el, node){
+  el.innerHTML='';
+  if(!node){ el.innerHTML='<div class="hint">这篇文档没有 Markdown 标题层级，抽不出子弹笔记；请用 📄 看原文。</div>'; return; }
+  function build(n){
+    const li=document.createElement('li'); li.className='bn-item lv'+Math.min(n.lv,4);
+    const head=document.createElement('div'); head.className='bn-head';
+    const lab=document.createElement('span'); lab.className='bn-label'; lab.textContent=n.text||'（无标题）';
+    head.appendChild(lab);
+    (n.maps||[]).forEach(m=>{
+      const chip=document.createElement('span'); chip.className='bn-map'+(m.explicit?' explicit':'');
+      chip.title='映射到节点 '+(m.num||m.id)+(m.explicit?'（手动标注）':'（自动匹配 '+(m.score*100|0)+'%）')+' · 点击跳到该节点';
+      chip.textContent='↦ '+(m.num||'')+' '+(m.title||'');
+      chip.addEventListener('click', ev=>{ ev.stopPropagation(); const tgt=findNode(curRoot(), m.id); if(tgt) revealNode(tgt); });
+      head.appendChild(chip);
+    });
+    li.appendChild(head);
+    const bits=[];
+    if(n.info&&n.info.section) bits.push('§ '+n.info.section);
+    if(n.info&&n.info.words) bits.push(n.info.words+' 字');
+    if(n.info&&n.info.src) bits.push('源：'+n.info.src);
+    if(bits.length){ const meta=document.createElement('div'); meta.className='bn-meta'; meta.textContent=bits.join('　·　'); li.appendChild(meta); }
+    if(n.body){ const bd=document.createElement('div'); bd.className='bn-body'; bd.textContent=n.body; li.appendChild(bd); }
+    if(n.children&&n.children.length){ const sub=document.createElement('ul'); sub.className='bn-list'; n.children.forEach(c=>sub.appendChild(build(c))); li.appendChild(sub); }
+    return li;
+  }
+  const ul=document.createElement('ul'); ul.className='bn-list';
+  if(node.text && node.text.trim()){ ul.appendChild(build(node)); }
+  else { (node.children||[]).forEach(c=>ul.appendChild(build(c))); }
+  el.appendChild(ul);
+}
+function countBulletNodes(node){
+  if(!node) return 0;
+  let c=1; (node.children||[]).forEach(ch=> c+=countBulletNodes(ch)); return c;
+}
+// ---- 文档大卡片：把每份文档渲染成节点旁的可滚动「子弹笔记」面板，取代把子弹拆成枝桠 ----
+// 视图级（不持久化）。数据 = docBullets（子弹树）+ 关系编码（maps，↦ chips 可跳转）。
+// 两入口：ctxSprout.mode==='global' 全铺所有文档；==='node' 只显示选中节点的文档。
+const DOC_CARD_W=220, DOC_CARD_H=280, DOC_CARD_GAP=22;
+let docCardHosts=[];
+function collectDocHosts(root){
+  docCardHosts=[];
+  if(ctxSprout.mode==='global'){
+    const seen=new Set();
+    // 用 eachVisible（只收当前可见节点）：折叠分支的节点不显示文档卡，
+    // 「全部展开」后自然扩到全量——与树可见性保持同步。
+    eachVisible(root, n=>{
+      const d=docOf(n); if(!d) return;
+      if(!isFinite(n._x)||!isFinite(n._y)) return;   // 未布局坐标的节点跳过，否则 NaN 会污染布局与视图
+      const dk=n.docKey||n.docPath||d.path||n.title;
+      if(seen.has(dk)) return; seen.add(dk);
+      docCardHosts.push({n, dk, d});
+    });
+  } else if(ctxSprout.mode==='node'){
+    const n=ctxSprout.nid ? findNode(root, ctxSprout.nid) : findNode(root, selectedId); if(!n) return;
+    if(!isFinite(n._x)||!isFinite(n._y)) return;
+    const d=docOf(n); if(!d) return;
+    const dk=n.docKey||n.docPath||d.path||n.title;
+    docCardHosts.push({n, dk, d});
+  }
+}
+function layoutDocCards(root){
+  // 文档卡 = 父节点的「大号附属」，贴父节点外侧方向（沿父节点→远离集群质心），不绕圈。
+  // 节点可小幅让位（连子树整体平移，保持分支走向不变），有 MAX_YIELD 上限防飞远。
+  const nodesById={};
+  eachVisible(root, n=>{ nodesById[n.id]=n; });
+  const ids=Object.keys(nodesById);
+  if(!ids.length) return;
+
+  // 父指针（祖先判断用，O(深度)）
+  const parentOf={};
+  walkActive(root, n=>{ (n.children||[]).forEach(c=>{ parentOf[c.id]=n.id; }); });
+  const isAnc=(aId,bId)=>{ let p=bId; while(p){ p=parentOf[p]; if(p===aId) return true; } return false; };
+
+  // 集群质心（外侧方向参照）
+  let cx=0, cy=0;
+  ids.forEach(id=>{ const n=nodesById[id]; cx+=n._x+CW/2; cy+=n._y+CH/2; });
+  cx/=ids.length; cy/=ids.length;
+
+  const PAD=14;
+  const cw=DOC_CARD_W/2, chh=DOC_CARD_H/2;
+  const baseDist=Math.hypot(CW,CH)/2 + Math.hypot(DOC_CARD_W,DOC_CARD_H)/2 + PAD;
+
+  // 1. 文档卡贴父节点外侧方向（沿父节点→远离集群质心，贴父、不绕圈）。
+  //    子树整体让位已保证分支走向；出线段被卡轻盖是次要问题，不做「避开出线方向」——那会让
+  //    卡偏转到别的密集区、加深节点互压。
+  docCardHosts.forEach(h=>{
+    const host=h.n;
+    const hcx=host._x+CW/2, hcy=host._y+CH/2;
+    let dx=hcx-cx, dy=hcy-cy;
+    const len=Math.hypot(dx,dy);
+    if(len<1){ dx=1; dy=0; } else { dx/=len; dy/=len; }
+    h._x=hcx+dx*baseDist-cw;
+    h._y=hcy+dy*baseDist-chh;
+  });
+
+  // 卡跟随宿主：记录相对偏移
+  const hostOf={};
+  docCardHosts.forEach(h=>{ h._offx=h._x-h.n._x; h._offy=h._y-h.n._y; hostOf[h.n.id]=h; });
+
+  // 子树整体平移（含卡跟随）——保持分支走向不变。
+  // 让位上限在每次平移后立即约束：子树累计位移超 MAX_YIELD 就整体拉回——节点永远不飞远，
+  // 也不需要事后回拉（回拉会引发二次挤压振荡）。
+  const MAX_YIELD=250;
+  const origin={};
+  ids.forEach(id=>{ const n=nodesById[id]; origin[id]={x:n._x,y:n._y}; });
+  const shift=(n, dx, dy)=>{
+    const rec=x=>{
+      x._x+=dx; x._y+=dy;
+      const h=hostOf[x.id];
+      if(h){ h._x=x._x+h._offx; h._y=x._y+h._offy; }
+      (x.children||[]).forEach(rec);
+    };
+    rec(n);
+    const o=origin[n.id];
+    if(o){
+      const ddx=n._x-o.x, ddy=n._y-o.y;
+      const dist=Math.hypot(ddx,ddy);
+      if(dist>MAX_YIELD){
+        const k=MAX_YIELD/dist;
+        const fx=(o.x+ddx*k)-n._x, fy=(o.y+ddy*k)-n._y;
+        (function rec2(x){
+          x._x+=fx; x._y+=fy;
+          const h=hostOf[x.id];
+          if(h){ h._x=x._x+h._offx; h._y=x._y+h._offy; }
+          (x.children||[]).forEach(rec2);
+        })(n);
+      }
+    }
+  };
+
+  // 2. 级联松弛（一轮 = 卡推节点 + 卡推卡宿主 + 节点互推；上限已在 shift 内实时约束）
+  const relaxPass=()=>{
+    let moved=false;
+
+    // 卡 vs 节点：被卡压到的「顶层节点」（祖先不被同卡压）连子树让位
+    for(const h of docCardHosts){
+      const hit=new Set();
+      ids.forEach(id=>{
+        const n=nodesById[id];
+        const ox=Math.min(h._x+DOC_CARD_W,n._x+CW)-Math.max(h._x,n._x);
+        const oy=Math.min(h._y+DOC_CARD_H,n._y+CH)-Math.max(h._y,n._y);
+        if(ox>0&&oy>0) hit.add(id);
+      });
+      hit.forEach(id=>{
+        // 祖先也被压 → 让位祖先即可，跳过（避免子树重复平移）
+        let p=parentOf[id];
+        while(p){ if(hit.has(p)) return; p=parentOf[p]; }
+        const n=nodesById[id];
+        const ox=Math.min(h._x+DOC_CARD_W,n._x+CW)-Math.max(h._x,n._x);
+        const oy=Math.min(h._y+DOC_CARD_H,n._y+CH)-Math.max(h._y,n._y);
+        let dx=(n._x+CW/2)-(h._x+DOC_CARD_W/2), dy=(n._y+CH/2)-(h._y+DOC_CARD_H/2);
+        const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
+        shift(n, dx*(Math.min(ox,oy)+PAD), dy*(Math.min(ox,oy)+PAD));
+        moved=true;
+      });
+    }
+
+    // 卡 vs 卡：推开双方宿主（连子树，卡跟随）
+    for(let i=0;i<docCardHosts.length;i++){
+      for(let j=i+1;j<docCardHosts.length;j++){
+        const a=docCardHosts[i], b=docCardHosts[j];
+        const ox=Math.min(a._x+DOC_CARD_W,b._x+DOC_CARD_W)-Math.max(a._x,b._x);
+        const oy=Math.min(a._y+DOC_CARD_H,b._y+DOC_CARD_H)-Math.max(a._y,b._y);
+        if(ox>0&&oy>0){
+          let dx=b._x-a._x, dy=b._y-a._y;
+          const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
+          const push=Math.min(ox,oy)*0.5+2;
+          shift(a.n,-dx*push,-dy*push);
+          shift(b.n, dx*push, dy*push);
+          moved=true;
+        }
+      }
+    }
+
+    // 节点 vs 节点（跨子树对称推开，消除让位挤压）
+    for(let i=0;i<ids.length;i++){
+      for(let j=i+1;j<ids.length;j++){
+        const a=nodesById[ids[i]], b=nodesById[ids[j]];
+        if(isAnc(ids[i],ids[j])||isAnc(ids[j],ids[i])) continue;   // 同子树整体移动，内部不重叠
+        const ox=Math.min(a._x+CW,b._x+CW)-Math.max(a._x,b._x);
+        const oy=Math.min(a._y+CH,b._y+CH)-Math.max(a._y,b._y);
+        if(ox>0&&oy>0){
+          let dx=b._x-a._x, dy=b._y-a._y;
+          const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
+          const push=Math.min(ox,oy)*0.5+2;
+          shift(a,-dx*push,-dy*push);
+          shift(b, dx*push, dy*push);
+          moved=true;
+        }
+      }
+    }
+    return moved;
+  };
+  for(let round=0; round<90; round++){ if(!relaxPass()) break; }
+
+  // 3. 卡-only 收尾松弛：残余重叠只推卡（节点到此为止不再动）。
+  //    让位上限内的空间不足时，卡被推离宿主一点——归属靠连线，紧凑靠「不飞远」。
+  for(let round=0; round<60; round++){
+    let moved=false;
+    for(let i=0;i<docCardHosts.length;i++){
+      const a=docCardHosts[i];
+      for(let j=0;j<docCardHosts.length;j++){
+        if(j===i) continue;
+        const b=docCardHosts[j];
+        const ox=Math.min(a._x+DOC_CARD_W,b._x+DOC_CARD_W)-Math.max(a._x,b._x);
+        const oy=Math.min(a._y+DOC_CARD_H,b._y+DOC_CARD_H)-Math.max(a._y,b._y);
+        if(ox>0&&oy>0){
+          let dx=(a._x+DOC_CARD_W/2)-(b._x+DOC_CARD_W/2), dy=(a._y+DOC_CARD_H/2)-(b._y+DOC_CARD_H/2);
+          const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
+          a._x+=dx*(Math.min(ox,oy)+4); a._y+=dy*(Math.min(ox,oy)+4);
+          moved=true;
+        }
+      }
+      for(const id of ids){
+        const n=nodesById[id];
+        if(n.id===a.n.id) continue;
+        const ox=Math.min(a._x+DOC_CARD_W,n._x+CW)-Math.max(a._x,n._x);
+        const oy=Math.min(a._y+DOC_CARD_H,n._y+CH)-Math.max(a._y,n._y);
+        if(ox>0&&oy>0){
+          let dx=(a._x+DOC_CARD_W/2)-(n._x+CW/2), dy=(a._y+DOC_CARD_H/2)-(n._y+CH/2);
+          const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
+          a._x+=dx*(Math.min(ox,oy)+4); a._y+=dy*(Math.min(ox,oy)+4);
+          moved=true;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
+// 单节点文档卡：只把目标节点「附近」的节点间隔拉大（局部 ×factor），像全局 ×1.7 一样，
+// 但只波及邻域、远处树不动——避免整图重排。放在 layout() 之后、collectDocHosts 之前调用。
+// 实现：以目标节点为锚，对邻域内每个节点做「相对目标偏移 ×(factor−1)」的缩放展开（falloff 到边界归零）。
+// 这正是全局 ×factor 在局部的数学等价——离目标越近推得越多、远处自然不动，能真正撑开空间放下文档大卡。
+function localDocSpread(targetId, factor){
+  const root=curRoot();
+  const t=findNode(root, targetId); if(!t||!isFinite(t._x)||!isFinite(t._y)) return;
+  const tx=t._x+CW/2, ty=t._y+CH/2;
+  const RAD=Math.max(CW,CH)*4;                   // 局部影响半径：覆盖目标周围足够多的邻域节点
+  const nodes=[];
+  eachVisible(root,n=>{ if(n.id===targetId) return;
+    const dx=n._x+CW/2-tx, dy=n._y+CH/2-ty, d=Math.hypot(dx,dy);
+    if(d<=RAD) nodes.push({n,dx,dy,d}); });
+  if(!nodes.length) return;
+  const parentOf={}; walkActive(root,n=>{(n.children||[]).forEach(c=>parentOf[c.id]=n.id);});
+  const origin={}; nodes.forEach(o=>origin[o.n.id]={x:o.n._x,y:o.n._y});
+  const MAXY=460;                                // 单节点让位上限，比全局更克制（远处不动）
+  const shift=(n,mx,my)=>{ const rec=x=>{x._x+=mx;x._y+=my;(x.children||[]).forEach(rec);}; rec(n);
+    const o=origin[n.id]; if(o){ const ddx=n._x-o.x,ddy=n._y-o.y,dist=Math.hypot(ddx,ddy);
+      if(dist>MAXY){ const k=MAXY/dist, fx=(o.x+ddx*k)-n._x, fy=(o.y+ddy*k)-n._y;
+        (function r2(x){x._x+=fx;x._y+=fy;(x.children||[]).forEach(r2);})(n); } } };
+  // 缩放展开：节点相对目标的偏移按 (factor−1)×fall 放大（fall 离目标越近越大，到 RAD 归零）
+  nodes.forEach(o=>{ const fall=Math.max(0,1-o.d/RAD); if(fall<=0) return;
+    shift(o.n, o.dx*(factor-1)*fall, o.dy*(factor-1)*fall); });
+  // 邻域重叠消解（同一子树内部不动），把缩放后可能的局部重叠推开，其余交给 layoutDocCards 收尾
+  for(let round=0; round<50; round++){ let moved=false;
+    for(let i=0;i<nodes.length;i++) for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i].n, b=nodes[j].n;
+      if(parentOf[a.id]===b.id||parentOf[b.id]===a.id) continue;
+      const ox=Math.min(a._x+CW,b._x+CW)-Math.max(a._x,b._x);
+      const oy=Math.min(a._y+CH,b._y+CH)-Math.max(a._y,b._y);
+      if(ox>0&&oy>0){ let dx=b._x-a._x, dy=b._y-a._y,dd=Math.hypot(dx,dy)||1; dx/=dd; dy/=dd;
+        const push=Math.min(ox,oy)*0.5+2; shift(a,-dx*push,-dy*push); shift(b,dx*push,dy*push); moved=true; } }
+    if(!moved) break;
+  }
+}
+// 点节点上的 📑：只在这张节点旁单独把文档大卡片「嫁接到画布」（与 🌐 全局同一套渲染，只是单节点），
+// 并局部拉大邻域间隔放下它。不打开右侧检视器浮层、不甩动视图——卡片就长在节点分支位上，是地图的一部分。
+function sproutDocAt(n){
+  if(!n || !docOf(n)) return;
+  // 再点同一节点的 📑 → 取消这张单卡（退出 node 模式）
+  if(ctxSprout.mode==='node' && ctxSprout.nid===n.id){
+    ctxSprout={mode:'off'}; selectedId=null; render(); return;
+  }
+  selectedId = n.id;                 // 仅点亮选中态，不调 selectNode（那会滑入检视器浮层）
+  ctxSprout={mode:'node', nid:n.id};
+  render();                          // 在画布节点旁分支位嫁接文档大卡片（含节点→卡连线），视图与检视器均不动
+}
+// 把视野平移到「节点 + 文档卡」都可见的框（单卡弹出的归属感视图）
+function panToBox(minX,minY,maxX,maxY){
+  const r=svg.getBoundingClientRect();
+  const pad=40, w=(maxX-minX)*view.z, hh=(maxY-minY)*view.z;
+  view.x = (w<=r.width-pad*2) ? (r.width-w)/2 - minX*view.z : pad - minX*view.z;
+  view.y = (hh<=r.height-pad*2) ? (r.height-hh)/2 - minY*view.z : pad - minY*view.z;
+  applyView();
+}
+function renderDocCards(){
+  const layer=document.getElementById('docCardLayer'); if(!layer) return;
+  layer.innerHTML='';
+  docCardHosts.forEach(h=> renderDocCard(layer, h));
+}
+// fit 到「节点+文档卡」总范围（全局上下文模式的概览视图；「全部展开」后也走这里，否则卡片全在视野外）
+function fitAllCards(){
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  eachVisible(curRoot(),n=>{minX=Math.min(minX,n._x);maxX=Math.max(maxX,n._x+CW);minY=Math.min(minY,n._y);maxY=Math.max(maxY,n._y+CH);});
+  docCardHosts.forEach(h=>{minX=Math.min(minX,h._x);maxX=Math.max(maxX,h._x+DOC_CARD_W);minY=Math.min(minY,h._y);maxY=Math.max(maxY,h._y+DOC_CARD_H);});
+  if(!isFinite(minX)||maxX<minX) return;
+  const r=svg.getBoundingClientRect();
+  const pad=30, w=Math.max(1,maxX-minX), hh=Math.max(1,maxY-minY);
+  view.z=clamp(Math.min(r.width/(w+pad*2), r.height/(hh+pad*2)),0.12,1);
+  view.x=(r.width-w*view.z)/2-minX*view.z;
+  view.y=(r.height-hh*view.z)/2-minY*view.z;
+  applyView();
+}
+function renderDocCard(layer, h){
+  const NS='http://www.w3.org/2000/svg';
+  const tree=getBullets(h.dk, h.d);
+  const ttl=(h.n.title||'').trim()||(h.d.path||'').split('/').pop()||'文档';
+  const host=h.n;
+  const hostCx=host._x+CW/2, hostCy=host._y+CH/2;
+  const cardCx=h._x+DOC_CARD_W/2, cardCy=h._y+DOC_CARD_H/2;
+  // 连线：父节点边缘 → 大卡片边缘（accent2 实线，和卡片边框同色，表达归属），先画在卡片下面
+  const outA=edgePoint(host, cardCx, cardCy);
+  const inB=cardEdge(h, hostCx, hostCy);
+  const line=document.createElementNS(NS,'path');
+  line.setAttribute('d', linkPath(outA, inB, 14));
+  line.setAttribute('fill','none');
+  line.setAttribute('stroke','var(--accent2)');
+  line.setAttribute('stroke-width','1.8');
+  line.setAttribute('opacity','0.7');
+  line.setAttribute('stroke-linejoin','round');
+  layer.appendChild(line);
+  const g=document.createElementNS(NS,'g');
+  g.setAttribute('transform','translate('+h._x.toFixed(1)+','+h._y.toFixed(1)+')');
+  const fo=document.createElementNS(NS,'foreignObject');
+  fo.setAttribute('width',DOC_CARD_W); fo.setAttribute('height',DOC_CARD_H);
+  fo.setAttribute('overflow','hidden');
+  fo.innerHTML='<div class="doccard" xmlns="http://www.w3.org/1999/xhtml">'
+    +'<div class="dc-head"><span class="dc-title">'+escapeHtml(ttl)+'</span>'
+    +'<span class="dc-cnt">'+countBulletNodes(tree)+' 条</span>'
+    +'<button class="dc-close" title="关闭此文档卡">×</button></div>'
+    +'<div class="dc-body"></div></div>';
+  g.appendChild(fo);
+  layer.appendChild(g);
+  const body=fo.querySelector('.dc-body');
+  renderCtxBullet(body, tree);
+  const close=fo.querySelector('.dc-close');
+  if(close) close.addEventListener('click', ()=>{
+    g.remove(); line.remove();
+    if(ctxSprout.mode==='node'){ ctxSprout={mode:'off'}; render(); }   // 关掉这张单卡即退出 node 模式
+  });
+}
+function cardEdge(h, tx, ty){
+  const cx=h._x+DOC_CARD_W/2, cy=h._y+DOC_CARD_H/2;
+  let dx=tx-cx, dy=ty-cy;
+  if(Math.abs(dx)<0.001&&Math.abs(dy)<0.001){ dx=1; dy=0; }
+  const hw=DOC_CARD_W/2, hh=DOC_CARD_H/2;
+  const fx=Math.abs(dx)>0.001?hw/Math.abs(dx):Infinity;
+  const fy=Math.abs(dy)>0.001?hh/Math.abs(dy):Infinity;
+  const s=Math.min(fx,fy);
+  return {x:cx+dx*s, y:cy+dy*s, nx:fx<=fy?Math.sign(dx):0, ny:fx<=fy?0:Math.sign(dy)};
+}
+// 右栏检视器：在「子弹笔记」与「思维导图」两种形态间切换
+function setDocCtxTab(tab, tree, doc){
+  const box=document.getElementById('roDocBox');
+  if(box) box.dataset.tab=tab;
+  document.querySelectorAll('#docCtxTabs button').forEach(b=>b.classList.toggle('active', b.dataset.ctx===tab));
+  const bv=document.getElementById('roBulletView'), mv=document.getElementById('roMapView');
+  if(tab==='map'){
+    // 思维导图形态 = 在画布上节点旁弹出「文档大卡片」（可滚动阅读整份文档的子弹笔记），不再是标题树
+    if(ctxSprout.mode!=='global') ctxSprout={mode:'node'};
+    const n=findNode(curRoot(), selectedId);
+    bv.style.display='none'; mv.style.display='block';
+    // 收起右栏检视器（保留 selectedId），否则会挡住画布上的文档大卡
+    const ins=document.getElementById('inspector');
+    if(ins){ ins.classList.remove('show'); document.body.classList.remove('ins-open'); }
+    if(ctxSprout.mode==='global'){
+      mv.innerHTML='<div class="ctx-note">✓ 全局上下文已展开：每个带文档的节点旁都铺出「文档大卡片」，可滚动阅读整份子弹笔记；点卡片右上角 × 可关闭单张。</div>';
+    }else{
+      mv.innerHTML='<div class="ctx-note">✓ 已在「'+(n?(n.title||''):'当前节点')+'」旁弹出它的文档大卡片，可滚动阅读整份子弹笔记。<br>卡片内 ↦ 标注点击可跳转到对应节点。</div>';
+    }
+  }else{
+    if(ctxSprout.mode==='node') ctxSprout={mode:'off'};
+    mv.style.display='none'; bv.style.display='block';
+    // 恢复右栏检视器
+    const ins=document.getElementById('inspector');
+    if(ins && selectedId){ ins.classList.add('show'); document.body.classList.add('ins-open'); }
+    renderCtxBullet(bv, tree);
+  }
+  render();   // 同步画布上的上下文分支
+  // 单节点弹卡：把视图平移到「节点 + 文档大卡」都可见（卡片贴身弹出，归属感）
+  if(tab==='map' && ctxSprout.mode==='node' && docCardHosts.length){
+    const h=docCardHosts[0], n=h.n;
+    panToBox(Math.min(n._x,h._x), Math.min(n._y,h._y),
+             Math.max(n._x+CW,h._x+DOC_CARD_W), Math.max(n._y+CH,h._y+DOC_CARD_H));
+  }
+}
+// 检视器内的形态切换
+document.getElementById('docCtxTabs').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-ctx]'); if(!b) return;
+  const n=findNode(curRoot(), selectedId);
+  const doc=n?docOf(n):null;
+  const tree=doc?getBullets(n.docKey||n.docPath||doc.path||n.title, doc):null;
+  setDocCtxTab(b.dataset.ctx, tree, doc);
+});
+
+
+function docHeadings(md){
+  const lines=(md||'').replace(/\r\n?/g,'\n').split('\n');
+  const hs=[]; let i=0, idx=0;
+  while(i<lines.length){
+    const l=lines[i];
+    if(/^\s*```/.test(l)){ i++; while(i<lines.length && !/^\s*```/.test(lines[i])) i++; i++; continue; }
+    if(/^\s*<!--/.test(l)){ while(i<lines.length && !/-->/.test(lines[i])) i++; i++; continue; }
+    const m=l.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if(m) hs.push({lv:m[1].length, text:m[2].trim(), id:'dh'+(idx++)});
+    i++;
+  }
+  return hs;
+}
+
+function docMapHtml(md, rootLabel){
+  const hs=docHeadings(md);
+  if(!hs.length){
+    return '<div class="md"><p style="color:var(--muted)">该文档没有 Markdown 标题（#），抽不出层级结构；请切到「原文」阅读全文。</p></div>';
+  }
+  const minLv=Math.min.apply(null,hs.map(h=>h.lv));
+  const root={lv:0, text:rootLabel||'文档', children:[]};
+  const stack=[root];
+  hs.forEach(h=>{
+    const lv=h.lv-minLv+1;
+    const node={lv:lv, text:h.text, id:h.id, children:[]};
+    while(stack.length>1 && stack[stack.length-1].lv>=lv) stack.pop();
+    stack[stack.length-1].children.push(node);
+    stack.push(node);
+  });
+  // 若只有一个一级标题，直接拿它当根，避免「节点名 + 文档 H1」重复两层
+  let topText = rootLabel || '文档大纲', topKids = root.children, topId = '';
+  if(root.children.length===1 && root.children[0].lv===1 && root.children[0].children.length){
+    topText = root.children[0].text || topText;
+    topId = root.children[0].id;
+    topKids = root.children[0].children;
+    (function shift(n){ (n.children||[]).forEach(c=>{ c.lv=Math.max(1,c.lv-1); shift(c); }); })({children:topKids});
+  }
+
+  function draw(node){
+    if(!node.children.length) return '';
+    return '<div class="hm-kids">'+node.children.map(c=>
+      '<div class="hm-row"><span class="hm-node lv'+Math.min(c.lv,6)+'" data-h="'+c.id+'">'+escapeHtml(c.text)+'</span>'+draw(c)+'</div>'
+    ).join('')+'</div>';
+  }
+  return '<div class="hm-scroll" id="docMapTree"><div class="hm">'+
+      '<span class="hm-node root"'+(topId?' data-h="'+topId+'"':'')+'>'+escapeHtml(topText)+'</span>'+draw({children:topKids})+'</div></div>'+
+    '<div class="hm-legend">'+hs.length+' 个标题 · '+topKids.length+' 个一级分支 · 点节点跳到原文对应位置 · 可横竖滚动</div>';
+}
+
+// ---- 在文档里定位到「这个节点」---
+function normText(s){
+  return (s||'').toLowerCase()
+    .replace(/[（(][^）)]*[）)]/g,'')
+    .replace(/[\s\u3000·・、，,。：:；;！!？?“”"'‘’《》<>【】\[\]（）()\-—–_/\\|＊*=]+/g,'')
+    .replace(/^(第)?[一二三四五六七八九十百零0-9]+[章节部分步层]?/,'');
+}
+function bigrams(s){ const r=[]; for(let i=0;i<s.length-1;i++) r.push(s.slice(i,i+2)); return r; }
+function dice(a,b){
+  if(!a||!b) return 0;
+  if(a===b) return 1;
+  if(a.length<2||b.length<2) return 0;
+  const A=bigrams(a), B=bigrams(b), m={};
+  A.forEach(x=>{ m[x]=(m[x]||0)+1; });
+  let hit=0; B.forEach(x=>{ if(m[x]){ hit++; m[x]--; } });
+  return 2*hit/(A.length+B.length);
+}
+function simTitle(a,b){
+  if(!a||!b) return 0;
+  if(a===b) return 1;
+  let s=dice(a,b);
+  if(a.length>=4 && b.indexOf(a)>=0) s=Math.max(s,0.72+0.2*Math.min(1,a.length/b.length));
+  if(b.length>=4 && a.indexOf(b)>=0) s=Math.max(s,0.72+0.2*Math.min(1,b.length/a.length));
+  return s;
+}
+// 把节点标题拆成候选关键词（长的优先），用于「标题包含」与正文回落
+function needlesOf(node){
+  const t=(node.title||'').trim();
+  const parts=[t, t.replace(/[（(][^）)]*[）)]/g,'')];
+  t.split(/[：:（(（，,。；;＝=→\-–—_/]+/).forEach(p=>{ if(p.trim()) parts.push(p.trim()); });
+  (t.match(/[\u4e00-\u9fff]{3,}/g)||[]).forEach(x=>parts.push(x));
+  // 再按「的 / 与 / 和 / = / +」切一层，让「意识 = 状态差异的压缩动力学」也能匹配到「状态差异」这种标题词
+  parts.slice().forEach(x=>{
+    x.split(/[的地得与和及或=+×*·]+/).forEach(y=>{ if(y.trim()) parts.push(y.trim()); });
+  });
+  const seen={}, out=[];
+  parts.forEach(x=>{
+    const n=normText(x);
+    if(n.length>=3 && !seen[n]){ seen[n]=1; out.push(n); }
+  });
+  return out.sort((a,b)=>b.length-a.length);
+}
+// 三级定位：标题相似 → 标题含关键词 → 正文含关键词
+function locateSection(node, text){
+  const hs=docHeadings(text);
+  const nds=needlesOf(node);
+  const t=normText(node.title), nt=normText(node.note||'');
+  // 打分 = 标题相似 + 关键词命中加成 − H1 惩罚
+  // （H1 是文档总标题，跟节点名往往都像；不加惩罚就会停在文首而不是落在对应小节）
+  let best=null, bs=0;
+  hs.forEach(h=>{
+    const hn=normText(h.text);
+    let hits=0; nds.forEach(nd=>{ if(hn.indexOf(nd)>=0) hits++; });
+    const s=simTitle(t, hn) + hits*0.05 - (h.lv===1?0.07:0);
+    if(s>bs){ bs=s; best=h; }
+  });
+  if(bs<0.6 && nt.length>=4){
+    hs.forEach(h=>{ const s=simTitle(nt, normText(h.text)) - (h.lv===1?0.07:0); if(s>bs+0.12){ bs=s; best=h; } });
+  }
+  let target=null, hid=null;
+  if(best && bs>=0.6){
+    const el=document.getElementById(best.id);
+    if(el){ target=el; hid=best.id; }
+  }
+  if(!target){
+    for(const nd of nds){
+      const h=hs.find(x=>normText(x.text).indexOf(nd)>=0);
+      if(h){ const el=document.getElementById(h.id); if(el){ target=el; hid=h.id; break; } }
+    }
+  }
+  if(!target) target=findTextTarget(nds);
+  markMapCurrent(hid);
+  if(target){
+    target.scrollIntoView({block:'center'});
+    target.classList.add('hl');
+    setTimeout(()=>{ try{ target.classList.remove('hl'); }catch(e){} },2000);
+  }
+}
+function findTextTarget(nds){
+  const root=document.getElementById('docRaw');
+  if(!root || !nds.length) return null;
+  for(const nd of nds){
+    const tw=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let tn;
+    while((tn=tw.nextNode())){
+      const v=tn.nodeValue||'';
+      if(v.trim().length<2) continue;
+      const i=v.indexOf(nd);
+      if(i>=0){
+        const r=document.createRange();
+        r.setStart(tn,i); r.setEnd(tn,i+nd.length);
+        const sp=document.createElement('span');
+        sp.className='hl';
+        try{ r.surroundContents(sp); return sp; }catch(e){ break; }
+      }
+    }
+  }
+  return null;
+}
+function markMapCurrent(id){
+  document.querySelectorAll('#docMap .hm-node').forEach(e=>e.classList.toggle('cur', !!id && e.dataset.h===id));
+}
+
+function openDoc(node){
+  const d=docOf(node);
+  if(!d){ toast('该节点没有关联文档'); return; }
+  bumpHit(node.id);   // 打开文档也算一次「使用」
+  docNode=node;
+  document.getElementById('docTitle').textContent=node.title||'文档';
+  const tag = d.kind!=='auto' ? (node.docKey && node.docKey!==node.title ? '摘自《'+node.docKey+'》' : '原文')
+            : (node.docKey==='auto:overview' ? '自动生成的整合总览' : '自动生成的节点上下文');
+  document.getElementById('docPath').textContent=(d.path? d.path+'　·　':'')+tag;
+  document.getElementById('docRaw').innerHTML=mdToHtml(d.text);
+  document.getElementById('docMap').innerHTML=docMapHtml(d.text, node.title||'文档');
+  bindDocMap();
+  mapZoom=1;
+  setDocTab('raw');
+  document.getElementById('docModal').classList.add('show');
+  locateSection(node, d.text);
+}
+function applyMapZoom(){
+  const el=document.getElementById('docMapTree');
+  if(el) el.style.zoom=mapZoom;
+  const v=document.getElementById('mzVal');
+  if(v) v.textContent=Math.round(mapZoom*100)+'%';
+}
+function setMapZoom(d){
+  mapZoom=clamp(Math.round((mapZoom+d)*10)/10,0.5,1.6);
+  applyMapZoom();
+}
+// 导图纵向居中排布：根节点在整棵树的中线，长大文档要滚到根，否则一进来先看到中间分支
+function centerMapRoot(){
+  const body=document.querySelector('.docbody');
+  const root=document.querySelector('#docMap .hm-node.root');
+  if(!body||!root)return;
+  const br=body.getBoundingClientRect(), rr=root.getBoundingClientRect();
+  if(!br.width||!rr.height)return;
+  const delta=(rr.top-br.top)-(br.height-rr.height)/2;
+  if(Math.abs(delta)>4) body.scrollTop=Math.max(0, delta);
+}
+function setDocTab(t){
+  document.querySelectorAll('#docTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  document.getElementById('docRaw').classList.toggle('on', t==='raw');
+  document.getElementById('docMap').classList.toggle('on', t==='map');
+  document.getElementById('mapZoom').style.display = (t==='map') ? 'inline-flex' : 'none';
+  const body=document.querySelector('.docbody');
+  body.scrollTop=0; body.scrollLeft=0;
+  applyMapZoom();
+  if(t==='map') centerMapRoot();
+}
+function closeDoc(){
+  document.getElementById('docModal').classList.remove('show');
+  docNode=null;
+}
+function bindDocMap(){
+  // 同时绑定弹窗（#docMap）与右栏检视器（#roMapView）里的标题节点
+  document.querySelectorAll('#docMap .hm-node[data-h], #roMapView .hm-node[data-h]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const target=document.getElementById(el.dataset.h);
+      if(target){
+        target.scrollIntoView({block:'start',behavior:'smooth'});
+        target.classList.add('hl');
+        setTimeout(()=>target.classList.remove('hl'),1500);
+      }
+    });
+  });
+}
+
+// ---- projects：只切换，不新建/删除（由 spec 决定）----
+// ---- mode ----
+
+// ---- editor bindings ----
+document.getElementById('btnExportArc').addEventListener('click',exportArchive);
+document.getElementById('btnKeys').addEventListener('click',()=>toggleKeyPanel());
+document.getElementById('btnKeysClose').addEventListener('click',()=>toggleKeyPanel(false));
+let expandAllOn=false, expandAllSaved=null;   // toggle 状态：记录全展开前的折叠态，再点精确还原
+document.getElementById('btnExpandAll').addEventListener('click',()=>{
+  const root=curRoot(); if(!root) return;
+  const btn=document.getElementById('btnExpandAll');
+  if(expandAllOn){                            // 已全展开 → 再点取消，精确还原到展开前折叠态（含被折叠藏起的子孙）
+    (function w(x){ x.collapsed = expandAllSaved ? expandAllSaved.has(x.id) : false; kidsOf(x).forEach(w); })(root);
+    expandAllOn=false; expandAllSaved=null;
+    save(); render(); fitView();
+    btn.classList.remove('on');
+    toast('已收起到展开前状态');
+  } else {                                    // 首次点 → 展开全部，并记录原始折叠态
+    expandAllSaved=new Set();
+    (function w(x){ if(x.collapsed) expandAllSaved.add(x.id); kidsOf(x).forEach(w); })(root);
+    const k=expandAll(true);
+    expandAllOn=true;
+    btn.classList.add('on');
+    toast(k ? ('已展开 '+k+' 处折叠分支') : '这张图已经没有折叠分支了');
+  }
+});
+document.getElementById('btnCtxGlobal').addEventListener('click',()=>{
+  ctxSprout = (ctxSprout.mode==='global') ? {mode:'off'} : {mode:'global'};
+  document.getElementById('btnCtxGlobal').classList.toggle('on', ctxSprout.mode==='global');
+  render();
+  // 全铺后 fit 到「节点+文档卡」总范围：全局上下文=概览，第一眼看到完整全貌，卡片不贴边不被裁
+  if(ctxSprout.mode==='global' && docCardHosts.length) fitAllCards();
+});
+
+// 阶段栏 / 左栏折叠 / 说明浮层
+document.querySelectorAll('#phaseRail .pstep').forEach(b=>{
+  b.addEventListener('click',()=>setPhase(+b.dataset.ph));
+});
+function toggleRail(force){
+  const cur=document.body.classList.contains('rail-collapsed');
+  const want = (typeof force==='boolean') ? !force : !cur;   // force=true = 展开左栏
+  if(want===cur) return;
+  document.body.classList.toggle('rail-collapsed',want);
+  const on=document.body.classList.contains('rail-collapsed');
+  document.getElementById('btnCollapse').textContent = on ? '▶' : '◀';
+  setTimeout(()=>{ try{ fitView(); }catch(e){} },80);
+}
+document.getElementById('btnCollapse').addEventListener('click',toggleRail);
+document.getElementById('lens').addEventListener('change',e=>{ lens=e.target.value; render(); });
+document.getElementById('frame').addEventListener('change',e=>{
+  frame=e.target.value; frameWarned=''; render(); renderFwCard();
+  if(frame==='all'){ toast('镜片已关'); return; }
+  if(FRAME_PROMPTS[frame]){ toast(frame.indexOf('fw_')===0?'提问框架：清单已摆到画布左下':'框架清单已摆到画布左下'); return; }
+  if(!frameActive) return;   // 没读数时 render() 已经提示过了
+  const T={ess:'精要：只留过 90 线的选项 · 连线退到背景',
+           bayes:'贝叶斯：连线按证据强度加粗 · 没表态的淡出',
+           comp:'复利：只留资产型 · 连线退到背景',
+           inv:'逆向：只留被挑战过的卡 · 没做过失败测试的被压暗',
+           o2:'二阶：只留下游不亏的卡 · 有消耗型下游的压暗',
+           opp:'机会成本：只留放弃代价最高的选项 · 看差距'};
+  toast(T[frame]||'');
+});
+document.getElementById('verLoad').addEventListener('click',()=>{
+  state=seed(); currentId=state.projects[0].id; selectedId=null;
+  logEvent('reload'); save(); render(); fitView();
+  document.getElementById('verBar').classList.remove('show');
+  toast('已载入新版');
+});
+document.getElementById('verKeep').addEventListener('click',()=>{
+  state._builtAt=BUILT; save();
+  document.getElementById('verBar').classList.remove('show');
+  toast('保留本地改动（下次改 spec 会再提示）');
+});
+document.getElementById('btnHelp').addEventListener('click',e=>{
+  e.stopPropagation();
+  document.getElementById('helpPop').classList.toggle('show');
+});
+
+// 常驻搜索：输入即匹配，↑↓ 移动，回车跳转，Esc 收起；⌘K / Ctrl+K 聚焦
+const FIND_IN=document.getElementById('find'), FIND_LIST=document.getElementById('findList');
+FIND_IN.addEventListener('input',()=>runFind(FIND_IN.value));
+FIND_IN.addEventListener('focus',()=>{ if(FIND_IN.value.trim()) runFind(FIND_IN.value); });
+FIND_IN.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){ e.preventDefault(); moveFind(1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); moveFind(-1); }
+  else if(e.key==='Enter'){
+    e.preventDefault();
+    const n=findHits[findIdx<0?0:findIdx];
+    if(n){ revealNode(n); FIND_LIST.classList.remove('on'); FIND_IN.blur(); }
+  }
+  else if(e.key==='Escape'){ FIND_LIST.classList.remove('on'); FIND_IN.blur(); }
+});
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); FIND_IN.focus(); FIND_IN.select(); }
+  if(e.key==='Escape') FIND_LIST.classList.remove('on');
+});
+document.addEventListener('click',e=>{
+  const hp=document.getElementById('helpPop');
+  if(hp.classList.contains('show') && !hp.contains(e.target) && e.target.id!=='btnHelp'){
+    hp.classList.remove('show');
+  }
+});
+
+document.getElementById('btnDoc').addEventListener('click',()=>{ if(selectedId) openDoc(findNode(curRoot(),selectedId)); });
+document.querySelectorAll('#docTabs button').forEach(b=>b.addEventListener('click',()=>setDocTab(b.dataset.tab)));
+document.getElementById('docClose').addEventListener('click',closeDoc);
+document.getElementById('mzOut').addEventListener('click',()=>setMapZoom(-0.1));
+document.getElementById('mzIn').addEventListener('click',()=>setMapZoom(0.1));
+document.getElementById('docModal').addEventListener('click',e=>{ if(e.target.id==='docModal') closeDoc(); });
+document.getElementById('inspClose').addEventListener('click',closeInspector);
+
+// ---- pan / zoom ----
+let panning=false, panMoved=false, start={x:0,y:0};
+svg.addEventListener('mousedown',e=>{ if(e.target.closest('.card'))return; panning=true; panMoved=false; start={x:e.clientX-view.x,y:e.clientY-view.y}; svg.classList.add('panning'); });
+window.addEventListener('mousemove',e=>{ if(!panning)return; if(Math.abs(e.clientX-start.x)>3||Math.abs(e.clientY-start.y)>3) panMoved=true; view.x=e.clientX-start.x; view.y=e.clientY-start.y; applyView(); });
+window.addEventListener('mouseup',()=>{ panning=false; svg.classList.remove('panning'); });
+// 点画布空白处（非卡片）→ 关闭右半边上下文检视器（左半边思维导图保持可见）
+svg.addEventListener('click',e=>{
+  if(panMoved) return;
+  if(e.target.closest('.card')) return;
+  const id=e.target.id;
+  if(id==='svg'||id==='viewport'||id==='gEdges'||id==='gNodes'||id==='keyLayer'||id==='canvasWrap'){
+    if(document.getElementById('inspector').classList.contains('show')) closeInspector();
+  }
+});
+svg.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=svg.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const f=e.deltaY<0?1.12:0.89;
+  const nz=clamp(view.z*f,0.3,2.6);
+  view.x=mx-(mx-view.x)*(nz/view.z);
+  view.y=my-(my-view.y)*(nz/view.z);
+  view.z=nz; applyView();
+},{passive:false});
+document.getElementById('zoomIn').onclick=()=>{view.z=clamp(view.z*1.15,0.3,2.6);applyView();};
+document.getElementById('zoomOut').onclick=()=>{view.z=clamp(view.z*0.87,0.3,2.6);applyView();};
+document.getElementById('zoomReset').onclick=()=>fitView();
+// 全局：整棵树塞进视口（字会很小，用来看结构）
+document.getElementById('zoomAll').onclick=()=>{
+  const root=curRoot();
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  eachVisible(root,n=>{
+    minX=Math.min(minX,n._x); minY=Math.min(minY,n._y);
+    maxX=Math.max(maxX,n._x+CW); maxY=Math.max(maxY,n._y+CH);
+  });
+  if(!isFinite(minX))return;
+  const r=svg.getBoundingClientRect(); if(!r.width)return;
+  const pad=20, w=Math.max(1,maxX-minX), h=Math.max(1,maxY-minY);
+  const z=clamp(Math.min((r.width-pad*2)/w,(r.height-pad*2)/h),0.1,1);
+  view.z=z;
+  view.x=(r.width-w*z)/2-minX*z;
+  view.y=(r.height-h*z)/2-minY*z;
+  applyView();
+};
+
+// ---- export / import ----
+document.getElementById('btnExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='wb_'+(CONFIG.id||'app')+'_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+  toast('已导出 JSON');
+};
+
+
+// ---- toast ----
+let toastT=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1800); }
+
+// keyboard
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(document.getElementById('docModal').classList.contains('show')){ closeDoc(); return; }
+    if(document.getElementById('inspector').classList.contains('show')){ closeInspector(); return; }
+  }
+  const tag=document.activeElement && document.activeElement.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA')return;
+  if(e.key==='['){ e.preventDefault(); toggleRail(); return; }
+});
+
+// ---- config apply ----
+function applyConfig(){
+  document.title = CONFIG.title || CONFIG.brand || '工作台';
+  document.getElementById('modelBody').innerHTML = (CONFIG.modelHtml || '') +
+    (CONFIG.subtitle ? '<div class="hint" style="margin-top:8px">'+escapeHtml(CONFIG.subtitle)+'</div>' : '');
+  document.getElementById('closureLabel').textContent = CONFIG.closureLabel || '结构性闭合度';
+  const lg=document.getElementById('legend'); lg.innerHTML='';
+  const legend = CONFIG.legend || [
+    {key:'scan',text:'未闭合（0–99%）· 模块仍在拼装'},
+    {key:'closed',text:'已闭合（100%）· 模块咬合完成'},
+    {key:'link',text:'跨分支关联：选中节点才亮，标签写理由'},
+  ];
+  legend.forEach(item=>{
+    const d=document.createElement('div');
+    const color = item.key==='link' ? 'var(--accent2)' : 'var(--'+item.key+')';
+    d.innerHTML='<span class="dot" style="background:'+color+'"></span>'+item.text;
+    lg.appendChild(d);
+  });
+  // 决策图专属图例：仅当数据里真有类型 / 倾向时才追加，避免污染普通地图
+  let _hastype=false; walkActive(curRoot(),n=>{ if(n.type)_hastype=true; });
+  const _hasval=(curProj().edges||[]).some(e=>e.valence);
+  if(_hastype){
+    [['#6aa9ff','选项 · 候选方向（蓝左条）'],['#c08bff','维度 · 评估维度（紫左条）'],['#e0a84e','直觉 · 假设待证实（橙虚线）']].forEach(([c,t])=>{
+      const d=document.createElement('div'); d.innerHTML='<span class="dot" style="background:'+c+'"></span>'+t; lg.appendChild(d);
+    });
+  }
+  if(_hasval){
+    [['#56b870','倾向 · 正向（绿）'],['#e06c75','倾向 · 负向（红）']].forEach(([c,t])=>{
+      const d=document.createElement('div'); d.innerHTML='<span class="dot" style="background:'+c+'"></span>'+t; lg.appendChild(d);
+    });
+  }
+  // 视觉编码第二通道：仅当数据里真有 size/confidence/interest 才追加
+  let _hasvis=false; walkActive(curRoot(),n=>{ if(n.size!=null||n.confidence!=null||n.interest!=null)_hasvis=true; });
+  if(_hasvis){
+    [['#e0a84e','尺寸 · 大(L)/中(M)/小(S) → 卡片大小'],['#56b870','置信 · 绿高/橙中/红低（我们对该判断的确信度）'],['#e06c75','兴趣 · ★越多越能点燃（AuDHD 的引擎）']].forEach(([c,t])=>{
+      const d=document.createElement('div'); d.innerHTML='<span class="dot" style="background:'+c+'"></span>'+t; lg.appendChild(d);
+    });
+  }
+}
+
+// 卡片功能分支环图例（2026-10-20 加）：分支图标此前完全没有解释，等于自造了一套密码。
+// 独立成函数、从 render() 里调用——applyConfig() 跑在 render() 之前，那时分支还没画出来，
+// 判断「有没有分支」会永远为假。
+function renderBranchLegend(){
+  const lg=document.getElementById('legend2'); if(!lg) return;
+  lg.innerHTML=''; lg.classList.remove('on');
+  const has=document.getElementById('keyLayer')&&document.getElementById('keyLayer').querySelector('.affnode');
+  if(!has) return;                                    // 小图上没分支就不占行
+  const SEP=document.createElement('div');
+  SEP.className='legendsep'; SEP.textContent='卡边分支：';
+  SEP.title='长在卡片周围的小分支按钮，每类一个图标+配色，点击即执行对应动作';
+  lg.appendChild(SEP);
+  [['▼','#9db4d8','折叠这一支','收起整支子树'],
+   ['▶','var(--accent2)','展开这一支','橙色＝里面还藏着内容'],
+   ['⤓','#3fd0c9','展开这一支全部层级','把这一支下面所有折叠一次打开'],
+   ['🗂','#7fd4ff','文档展开成导图','把这篇文档的层级长在卡片右边，正文完整不截断'],
+   ['★','var(--accent2)','重点节点','重要 + 常用前 8，自动展开定位'],
+   ['📄','#4aa3ff','有文档','点击直接打开原文'],
+   ['📑','#7fd4ff','在节点旁展开文档卡','点节点上的 📑：只在这张节点旁铺出文档大卡片，并把附近节点间隔拉大放下它（非全局）'],
+   ['📝','#b07cff','有笔记','AI 策展的说明枢纽'],
+   ['🔗','#56b870','有联想连线','带论断的回头连接'],
+   ['✅','#2fb6a8','已打通路径','整条链闭合到 100%'],
+   ['⚡','#ffb84d','待强化','成形 ≤25%，值得优先补'],
+  ].forEach(([ic,c,t,sub])=>{
+    const d=document.createElement('div');
+    d.className='affleg';
+    d.innerHTML='<span class="afflegdot" style="border-color:'+c+';color:'+c+'">'+ic+'</span>'+t;
+    d.title=sub;
+    lg.appendChild(d);
+  });
+  lg.classList.add('on');
+}
+
+// ---- boot ----
+applyConfig();
+render();
+fitView();
+checkVersion();
+if(selectedId) selectNode(selectedId);
+</script>
+</body>
+</html>
